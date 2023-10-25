@@ -1,0 +1,32 @@
+//! Simplistic Model Layer
+//! with mock-store layer)
+//! Typically author prefers this pattern/structure:
+//! Web (IPC)
+//! Context -- Event
+//! Model
+//! Store
+//! We're covering Web, Context and Model only
+//! NOTE:
+//! Model Layer
+//! Design:
+//! - The Model layer normalizes the application's data type
+//!   structures and access.
+//! - All application code data access must go through the Model layer.
+//! - The `ModelManager` holds the internal states/resources
+//!   needed by ModelControllers to access data.
+//!   (e.g., db_pool, S3 client, redis client).
+//! - Model Controllers (e.g., `TaskBmc`, `ProjectBmc`) implement
+//!   CRUD and other data access methods on a given "entity"
+//!   (e.g., `Task`, `Project`).
+//!   (`Bmc` is short for Backend Model Controller).
+//! - In frameworks like Axum, Tauri, `ModelManager` are typically used as App State.
+//! - ModelManager are designed to be passed as an argument
+//!   to all Model Controllers functions.
+
+pub mod model_controller;
+pub mod model_manager;
+pub mod ticket;
+
+pub use model_controller::*;
+pub use model_manager::*;
+pub use ticket::*;

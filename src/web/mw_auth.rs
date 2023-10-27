@@ -86,6 +86,7 @@ pub async fn mw_ctx_resolver<B>(
 }
 
 // region: -- Ctx Extractor
+// NOTE: Watch Jon Gjengset's FromRequestParts breakdown: https://youtu.be/Wnb_n5YktO8?t=2723
 // NOTE: We need async-trait for our custom extractor. We use-
 // Axum's FromRequestParts<State>, where S requires Send and Sync
 // NOTE: There are two types of Extractors:

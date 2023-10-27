@@ -9,12 +9,14 @@ use std::net::SocketAddr;
 
 use axum::{
     extract::{Path, Query},
+    http::{Method, Uri},
     middleware,
     response::{Html, IntoResponse, Response},
     routing::{get, get_service},
-    Router,
+    Json, Router,
 };
 use serde::Deserialize;
+use serde_json::json;
 use tower_cookies::CookieManagerLayer;
 use tower_http::services::ServeDir;
 
@@ -23,11 +25,14 @@ use tower_http::services::ServeDir;
 // pub mod instructions;
 use ctx::*; // Custom Extractor
 use error::*;
+use log::*;
 use model::*;
+use uuid::Uuid;
 use web::*;
 
 pub mod ctx;
 pub mod error;
+pub mod log;
 pub mod model;
 pub mod web;
 
@@ -78,11 +83,60 @@ async fn main() -> Result<()> {
 }
 
 // Adding first layer (middleware)
-async fn main_response_mapper(res: Response) -> Response {
+// REF: Interesting relevant Axum details by Jon Gjengset: https://youtu.be/Wnb_n5YktO8?t=2273
+// This is where the "magic" happens:
+// REF: https://youtu.be/XZtlD_m59sM?t=4154
+// U: Adding our log_request() helper for logging requests per line
+// Thanks to Axum's Extractors, we can get all the needed info.
+async fn main_response_mapper(
+    ctx: Option<Ctx>,
+    uri: Uri,
+    req_method: Method,
+    res: Response,
+) -> Response {
     println!("->> {:<12} - main_response_mapper", "RES_MAPPER");
+    // Create a uuid to match our server errors to client errors
+    let uuid = Uuid::new_v4();
+
+    // - Get the eventual response error
+    let service_error = res.extensions().get::<Error>();
+    let client_status_error = service_error.map(|se| se.client_status_and_error());
+
+    // - If client error, build a new response
+    // Using as_ref() bc we're going to reuse this for server request login
+    let error_response = client_status_error
+        .as_ref()
+        .map(|(status_code, client_error)| {
+            let client_error_body = json!({
+                "error": {
+                    "type": client_error.as_ref(), // Thanks to strum_macros
+                    "req_uuid": uuid.to_string(),
+                }
+            });
+
+            println!("   ->> client error body: {client_error_body}");
+
+            // Build the new reponse from the client_error_body
+            // NOTE:Recall we expanded into_response() to be a Axum Response
+            // placeholder that takes the actual server error and
+            // inserts it into the Response via extensions_mut()
+            (*status_code, Json(client_error_body)).into_response()
+        });
+
+    // -- Build and log the server log line
+    // NOTE: Server Reequests Log Line vs. Tracing
+    // Tracing is adding warnings, info, debug, etc. inside your code so you can debug
+    // Requests log line is one log line per request with error and other info.
+    // You then can push to console.log() locally, and after deploying to the cloud
+    // you can then use tools like CloudWatch and query with cloud-native tools.
+    // NOTE: Option.unzip() gives us the Option<ClientError>
+    let client_error = client_status_error.unzip().1;
+    log_request(uuid, req_method, uri, ctx, service_error, client_error).await;
 
     println!();
-    res
+    // NOTE:If we remove our quick_dev req_login(), we'll see the error uuids
+    // match in the logs for both client and server errors. Neat!
+    error_response.unwrap_or(res)
 }
 
 fn routes_static() -> Router {

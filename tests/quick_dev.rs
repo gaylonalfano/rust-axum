@@ -35,7 +35,8 @@ async fn quick_dev() -> Result<()> {
             "pwd": "welcome"
         }),
     );
-    req_login.await?.print().await?;
+    // NOTE: Comment out this to test out some error logging
+    // req_login.await?.print().await?;
 
     // U: I've added a ModelManager { mc: ModelController } struct at this point
     let req_create_ticket_a = http_client.do_post(

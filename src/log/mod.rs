@@ -1,6 +1,9 @@
+// pub mod error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{ctx::Ctx, error::ClientError, Error, Result};
+use crate::ctx::Ctx;
+use crate::web::{self, ClientError};
+use crate::Result;
 use axum::http::{Method, Uri};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -16,7 +19,7 @@ pub async fn log_request(
     req_method: Method,
     uri: Uri,
     ctx: Option<Ctx>,
-    service_error: Option<&Error>,
+    service_error: Option<&web::Error>,
     client_error: Option<ClientError>,
 ) -> Result<()> {
     // Timestamp hack for now (should be UTC iso8601)
@@ -61,7 +64,7 @@ struct RequestLogLine {
     uuid: String,      // uuid string formatted
     timestamp: String, // (should be iso8601)
     // -- User and context attributes
-    user_id: Option<u64>,
+    user_id: Option<i64>,
 
     // -- http request attributes
     req_path: String,

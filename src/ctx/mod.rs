@@ -1,3 +1,6 @@
+pub mod error;
+
+pub use self::error::{Error, Result};
 // NOTE: Extractors at a high level is something that implements
 // FromRequest or FromRequestParts. This allows the extractor to
 // take parts (or whole) of the request, and turn into something
@@ -16,19 +19,26 @@
 // trait on the Extractor (we do this inside the middleware)
 #[derive(Clone, Debug)]
 pub struct Ctx {
-    user_id: u64,
+    user_id: i64,
 }
 
 impl Ctx {
+    pub fn root_ctx() -> Self {
+        Ctx { user_id: 0 }
+    }
     // NOTE: user_id is immutable, but we could add
     // mutable props (e.g., access level) later on
     // Constructor:
-    pub fn new(user_id: u64) -> Self {
-        Self { user_id }
+    pub fn new(user_id: i64) -> Result<Self> {
+        if user_id == 0 {
+            Err(Error::CtxCannotNewRootCtx)
+        } else {
+            Ok(Self { user_id })
+        }
     }
 
     // Property Accessors:
-    pub fn user_id(&self) -> u64 {
+    pub fn user_id(&self) -> i64 {
         // This way nobody can change user_id of a Ctx that
         // is not within this module
         self.user_id

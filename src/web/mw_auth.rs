@@ -4,14 +4,14 @@ use axum::http::request::Parts;
 use axum::RequestPartsExt;
 use axum::{http::Request, middleware::Next, response::Response};
 use lazy_regex::regex_captures;
+use serde::Serialize;
 use tower_cookies::{Cookie, Cookies};
 
 use crate::ctx::Ctx;
 use crate::model::ModelManager;
-use crate::web::AUTH_TOKEN;
-use crate::{Error, Result};
+use crate::web::{Error, Result, AUTH_TOKEN};
 
-pub async fn mw_require_auth<B>(
+pub async fn mw_ctx_require<B>(
     // cookies: Cookies,
     // NOTE: U: The BIG idea of Ctx is we're going to use it for privileges and access control,
     // at both the web layer and the model layer (access control?). So, Ctx is going to be
@@ -22,11 +22,11 @@ pub async fn mw_require_auth<B>(
     // it won't even run your middleware!
     // NOTE: If you require Ctx in your handlers, then this makes sure that if you
     // don't use Result<Ctx> or Option<Ctx> (i.e., you pass Ctx directly), it will error.
-    ctx: Result<Ctx>, // 'ctx: Ctx' - disables this mw_require_auth()
+    ctx: Result<Ctx>, // 'ctx: Ctx' - disables this mw_ctx_require()
     req: Request<B>,
     next: Next<B>,
 ) -> Result<Response> {
-    println!("->> {:<12} - mw_require_auth", "MIDDLEWARE");
+    println!("->> {:<12} - mw_ctx_require", "MIDDLEWARE");
 
     // Extract the Ctx using our custom Extractor that's implemented
     // the FromRequestParts trait. Now we can use this extractor
@@ -40,8 +40,7 @@ pub async fn mw_require_auth<B>(
 // NOTE: At a high level, we don't want this fn to fail. Instead, we want
 // to capture the errors and still continue processing next Middleware.
 // This allows other MW or handlers to manage the error as needed.
-//
-pub async fn mw_ctx_resolver<B>(
+pub async fn mw_ctx_resolve<B>(
     // NOTE: Eventually you'll want to access the State ModelController,
     // which will have our database
     _mm: State<ModelManager>,
@@ -49,28 +48,17 @@ pub async fn mw_ctx_resolver<B>(
     mut req: Request<B>,
     next: Next<B>,
 ) -> Result<Response> {
-    println!("->> {:<12} - mw_ctx_resolver", "MIDDLEWARE");
+    println!("->> {:<12} - mw_ctx_resolve", "MIDDLEWARE");
 
     let auth_token = cookies.get(AUTH_TOKEN).map(|c| c.value().to_string());
 
-    // Compute Result<Ctx>
-    let result_ctx = match auth_token
-        .ok_or(Error::AuthFailNoAuthTokenCookie)
-        .and_then(parse_token)
-    {
-        Ok((user_id, exp, sign)) => {
-            // TODO: Handle the expensive Token components validation here!
-            // NOTE: Apparently using match expr is more performant with async,
-            // compared to closures with map(), and_then(), etc.
-            Ok(Ctx::new(user_id))
-        }
-        Err(e) => Err(e),
-    };
+    // FIXME: Compute real CtxAuthResult<Ctx>
+    let result_ctx = Ctx::new(100).map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string()));
 
     // Now that we have result_ctx, we don't want to fail on this function if there
     // is an error. Instead, we need to remove the cookie if something
     // went wrong other than AuthFailNoAuthTokenCookie
-    if result_ctx.is_err() && !matches!(result_ctx, Err(Error::AuthFailNoAuthTokenCookie)) {
+    if result_ctx.is_err() && !matches!(result_ctx, Err(CtxExtError::TokenNotInCookie)) {
         cookies.remove(Cookie::named(AUTH_TOKEN))
     }
 
@@ -109,22 +97,23 @@ impl<S: Send + Sync> FromRequestParts<S> for Ctx {
         // We want to fail if we don't have our Ctx extractor.
         parts
             .extensions
-            .get::<Result<Ctx>>()
-            .ok_or(Error::AuthFailCtxNotInRequestExt)?
+            .get::<CtxExtResult>()
+            .ok_or(Error::CtxExt(CtxExtError::CtxNotInRequestExt))?
             .clone()
+            .map_err(Error::CtxExt)
 
         // endregion: -- NEW Cookies and token components validation
 
         // // region: -- OLD Handling cookies and our Ctx
         // // Extract user cookies using parts.extract
         // // NOTE: U: This can be expensive since our Ctx extractor is called twice
-        // // on each request (for mw_require_auth, and then for each handler)
-        // // To optimize this situation, we create another mw_ctx_resolver()
+        // // on each request (for mw_ctx_require, and then for each handler)
+        // // To optimize this situation, we create another mw_ctx_resolve()
         // // and moved this code there instead. Leaving here for reference.
         // let cookies = parts.extract::<Cookies>().await.unwrap();
         //
         // // Now that we have the cookies in our MW, we can do what we already
-        // // did inside the mw_require_auth fn.
+        // // did inside the mw_ctx_require fn.
         // // NOTE: Middleware has access to extractors as well, so we can use Tower's Cookies
         // // extractor to retrieve cookies from the request.
         // // This allows us to be in between the request.
@@ -139,8 +128,8 @@ impl<S: Send + Sync> FromRequestParts<S> for Ctx {
         // // TODO: Token components validation
         // // E.g., Typically connect to db or cache, do some hashing, etc.
         // // NOTE: This can be expensive since our Ctx extractor is called twice
-        // // on each request (for mw_require_auth, and then for each handler)
-        // // To optimize this situation, we create another mw_ctx_resolver()
+        // // on each request (for mw_ctx_require, and then for each handler)
+        // // To optimize this situation, we create another mw_ctx_resolve()
         // // and moved this code there instead. Leaving here for reference.
 
         // Ok(Ctx::new(user_id))
@@ -149,23 +138,13 @@ impl<S: Send + Sync> FromRequestParts<S> for Ctx {
 }
 // endregion: -- Ctx Extractor
 
-/// Parse a token of format `use-[user-id].[expiration].[signature]`
-/// Returns (user_id, expiration, signature)
-fn parse_token(token: String) -> Result<(u64, String, String)> {
-    // Using 'lazy-regex' to compile and reuse regex expressions
-    // regex_captures!() macro will parse the whole and destructure
-    // the regex groups into separate variables.
-    let (_whole, user_id, expiration, signature) = regex_captures!(
-        r#"^user-(\d+)\.(.+)\.(.+)"#, // a literal regex
-        &token
-    )
-    .ok_or(Error::AuthFailTokenWrongFormat)?;
+// region: -- Ctx Extractor Result/Error
+type CtxExtResult = core::result::Result<Ctx, CtxExtError>;
 
-    // Now we need to convert user_id &str to u64 or map to error
-    // map_err() is a combinator
-    let user_id: u64 = user_id
-        .parse()
-        .map_err(|_| Error::AuthFailTokenWrongFormat)?;
-
-    Ok((user_id, expiration.to_string(), signature.to_string()))
+#[derive(Clone, Serialize, Debug)]
+pub enum CtxExtError {
+    TokenNotInCookie,
+    CtxNotInRequestExt,
+    CtxCreateFail(String),
 }
+// endregion: -- Ctx Extractor Result/Error

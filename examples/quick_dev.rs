@@ -4,15 +4,17 @@
                   // uses reqwest and cookie store
                   // NOTE: We watch the src/ dir on backend, and tests/ (or examples/) dir on frontend
                   // BACKEND: cargo watch -q -c -w src/ -x run
-                  // FRONTEND: cargo watch -q -c -w tests/ -x "test -q quick_dev -- --nocapture"
+                  // FRONTEND: cargo watch -q -c -w examples/ -x "run --example quick_dev"
                   // NOTE: -q quiet, -c clear, -w watch, -x execute
 
 use anyhow::Result;
 use serde_json::json;
 
-#[tokio::test]
-async fn quick_dev() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let http_client = httpc_test::new_client("http://localhost:8080")?;
+
+    http_client.do_get("/index.html").await?.print().await?;
 
     // Setting up our watcher for hot reloading and logs, etc.
     // NOTE: In a separate terminal we run:
@@ -36,35 +38,7 @@ async fn quick_dev() -> Result<()> {
         }),
     );
     // NOTE: Comment out this to test out some error logging
-    // req_login.await?.print().await?;
-
-    // U: I've added a ModelManager { mc: ModelController } struct at this point
-    let req_create_ticket_a = http_client.do_post(
-        "/api/tickets",
-        json!({
-        "title": "Ticket AAA"
-        }),
-    );
-    req_create_ticket_a.await?.print().await?;
-
-    let req_create_ticket_b = http_client.do_post(
-        "/api/tickets",
-        json!({
-        "title": "Ticket BBB"
-        }),
-    );
-    req_create_ticket_b.await?.print().await?;
-
-    http_client
-        .do_delete("/api/tickets/1")
-        .await?
-        .print()
-        .await?;
-
-    http_client.do_get("/api/tickets").await?.print().await?;
-
-    // For fallback usually point to a web folder instead of main.rs
-    // http_client.do_get("/src/main.rs").await?.print().await?;
+    req_login.await?.print().await?;
 
     Ok(())
 }

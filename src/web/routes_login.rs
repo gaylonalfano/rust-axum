@@ -1,4 +1,4 @@
-use crate::{web, Error, Result};
+use crate::web::{self, Error, Result};
 use axum::{routing::post, Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -7,12 +7,12 @@ use tower_cookies::{Cookie, Cookies};
 // Common practice is to create a fn that returns the module Router
 // and then merge(web::routes_login::routes()) inside main
 pub fn routes() -> Router {
-    Router::new().route("/api/login", post(api_login))
+    Router::new().route("/api/login", post(api_login_handler))
 }
 
 // NOTE: We can return our crate::Result bc Error has impl into_response()
-async fn api_login(cookies: Cookies, payload: Json<LoginPayload>) -> Result<Json<Value>> {
-    println!("->> {:<12} - api_login", "HANDLER");
+async fn api_login_handler(cookies: Cookies, payload: Json<LoginPayload>) -> Result<Json<Value>> {
+    println!("->> {:<12} - api_login_handler", "HANDLER");
 
     // TODO: Implement real db/auth logic
     if payload.username != "demo1" || payload.pwd != "welcome" {

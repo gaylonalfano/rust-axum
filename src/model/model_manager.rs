@@ -18,7 +18,7 @@
 
 use axum::extract::FromRef;
 
-use crate::model::ModelController;
+// use crate::model::ModelController;
 use crate::{Error, Result};
 
 // NOTE: Multiple States structure example (ModelManager/AppState)
@@ -39,7 +39,7 @@ use crate::{Error, Result};
 #[derive(Clone, FromRef)]
 pub struct ModelManager {
     // substates go here...
-    pub mc: ModelController,
+    // pub mc: ModelController,
     // redis: RedisConnector,
     // s3: S3Bucket,
     // etc.
@@ -47,9 +47,11 @@ pub struct ModelManager {
 
 impl ModelManager {
     pub async fn new() -> Result<Self> {
-        let mc = ModelController::new().await?;
+        // FIXME: U: Removing this for now.
+        // let mc = ModelController::new().await?;
 
-        Ok(ModelManager { mc })
+        // Ok(ModelManager { mc })
+        Ok(ModelManager {})
     }
 
     // pub(in crate::model) fn db(&self) -> &Db {...}

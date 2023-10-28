@@ -7,17 +7,22 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+# -- Web
 axum = { version = "0.6.20", features = ["macros"] }
 tower-http = { version = "0.4", features = ["fs"] }
 tower-cookies = "0.9"
+# -- Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# -- Json
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_with = "3"
-# Cookies parsing
+# -- Cookies parsing
 lazy-regex = "3"
-# Ctx extractor
+# -- Ctx Extractor
 async-trait = "0.1"
-# Errors
+# -- Errors
 strum_macros = "0.25"
 uuid = { version = "1", features = ["v4", "fast-rng"] }
 

@@ -11,6 +11,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use tracing::debug;
 
 // NOTE: Error handling best practice/normalization
 // REF: https://youtu.be/XZtlD_m59sM
@@ -37,7 +38,7 @@ impl IntoResponse for Error {
         // NOTE: NEVER pass server errors to client! For security reasons,
         // you want the lazy path being the safe path. So by default, if we
         // don't put extrawork , we don't send extra info to the client.
-        println!("->> {:<12} - model::Error {self:?}", "INTO_RESPONSE");
+        debug!(" {:<12} - model::Error {self:?}", "INTO_RESPONSE");
 
         // U: First creating a placeholder Axum response rather than returning
         // a full error response.

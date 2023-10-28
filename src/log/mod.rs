@@ -8,6 +8,7 @@ use axum::http::{Method, Uri};
 use serde::Serialize;
 use serde_json::{json, Value};
 use serde_with::skip_serializing_none;
+use tracing::debug;
 use uuid::Uuid;
 
 // NOTE: Goal of this is we'll call this inside our
@@ -48,7 +49,7 @@ pub async fn log_request(
         error_data: service_error_data,
     };
 
-    println!("   ->> log request: \n{}", json!(request_log_line));
+    debug!("   ->> log request: \n{}", json!(request_log_line));
 
     // TODO: Send to cloud-watch service
     Ok(())

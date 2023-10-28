@@ -1,0 +1,12 @@
+# Config for all cargo commands along with environment variables
+# REF: 
+# NOTE: This versus .env file approach:
+# This will set and run ENV vars outside and before the 
+# application runs. When moving from Cargo container to, say, Kubernetes
+#
+# Environment variables set for all `cargo ...` commands
+[env]
+# Scope down tracing to filter out external lib tracing
+# NOTE: Convention is the Cargo.toml package.name goes
+# from "rust-web-app" -> "rust_web_app"
+RUST_LOG = "rust_axum=debug"

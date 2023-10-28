@@ -27,6 +27,8 @@ use ctx::*; // Custom Extractor
 use error::*;
 use log::*;
 use model::*;
+use tracing::{debug, info};
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 use web::*;
 
@@ -38,19 +40,19 @@ pub mod web;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Tracing
+    tracing_subscriber::fmt()
+        .without_time() // E.g. 2023-10-28T13:01:17.945497Z
+        .with_target(false) // For simple tracing
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+
     // Initialize ModelManager
     let mm = ModelManager::new().await?;
 
     // NOTE: You could create a separate struct for mw, but the from_fn() is very
     // powerful
     // REF: https://youtu.be/XZtlD_m59sM?t=2619
-    // FIXME: U: Commenting until we rebuild ModelManager
-    // let routes_api = web::routes_tickets::routes(mm.clone())
-    //     // Q: Why use route_layer() vs. layer()?
-    //     // A: route_layer only applies to this router, so routes_hello & routes_login
-    //     // won't be affected.
-    //     .route_layer(middleware::from_fn(web::mw_auth::mw_ctx_require));
-
     // NOTE: Basically every Axum route handler gets turned into a
     // Tower::Service trait, which is roughly equivalent to sth that
     // implements:
@@ -70,7 +72,7 @@ async fn main() -> Result<()> {
 
     // region:  --- Start Server
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    println!("->> {:<12} - {addr}\n", "LISTENING");
+    info!("->> {:<12} - {addr}\n", "LISTENING");
     axum::Server::bind(&addr)
         .serve(routes_all.into_make_service())
         .await
@@ -95,7 +97,7 @@ struct HelloParams {
 // Using Axum's Query extractor helper that deserializes query strings into some type
 // e.g., `/hello?name=Mario` -- as a query string
 async fn handler_hello(Query(params): Query<HelloParams>) -> impl IntoResponse {
-    println!("->> {:<12} - handler_hello - {params:?}", "HANDLER");
+    debug!(" {:<12} - handler_hello - {params:?}", "HANDLER");
 
     let name = params.name.as_deref().unwrap_or("World");
 
@@ -104,7 +106,7 @@ async fn handler_hello(Query(params): Query<HelloParams>) -> impl IntoResponse {
 
 // e.g., `/hello2/Mario` -- as a path
 async fn handler_hello2(Path(name): Path<String>) -> impl IntoResponse {
-    println!("->> {:<12} - handler_hello2 - {name:?}", "HANDLER");
+    debug!(" {:<12} - handler_hello2 - {name:?}", "HANDLER");
 
     Html(format!("Hello2 <strong>{name}!</strong>"))
 }

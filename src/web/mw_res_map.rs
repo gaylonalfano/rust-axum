@@ -5,6 +5,7 @@ use axum::http::{Method, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
+use tracing::debug;
 use uuid::Uuid;
 
 // Adding first layer (middleware)
@@ -19,7 +20,7 @@ pub async fn mw_response_map(
     req_method: Method,
     res: Response,
 ) -> Response {
-    println!("->> {:<12} - mw_response_map", "RES_MAPPER");
+    debug!(" {:<12} - mw_response_map", "RES_MAPPER");
     // Create a uuid to match our server errors to client errors
     let uuid = Uuid::new_v4();
 
@@ -39,7 +40,7 @@ pub async fn mw_response_map(
                 }
             });
 
-            println!("   ->> client error body: {client_error_body}");
+            debug!("   ->> client error body: {client_error_body}");
 
             // Build the new reponse from the client_error_body
             // NOTE:Recall we expanded into_response() to be a Axum Response
@@ -58,7 +59,7 @@ pub async fn mw_response_map(
     let client_error = client_status_error.unzip().1;
     log_request(uuid, req_method, uri, ctx, service_error, client_error).await;
 
-    println!();
+    debug!("\n");
     // NOTE:If we remove our quick_dev req_login(), we'll see the error uuids
     // match in the logs for both client and server errors. Neat!
     error_response.unwrap_or(res)

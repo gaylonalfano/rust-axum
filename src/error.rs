@@ -15,6 +15,9 @@ pub type Result<T> = core::result::Result<T, Error>;
 // and content="data" (internal data for each variant e.g., { id: u64 })
 #[derive(Debug)]
 pub enum Error {
+    // -- Config
+    ConfigMissingEnv(&'static str),
+
     // -- Modules
     Model(model::Error),
 }

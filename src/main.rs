@@ -1,11 +1,17 @@
 #![allow(unused)] // For beginners
 
+pub mod config;
+pub mod ctx;
+pub mod error;
+pub mod log;
+pub mod model;
+pub mod web;
+
 // Re-export our new custom Error and Result from error.rs
 // We now have a crate Error and crate Result we can import
 // into other modules.
 pub use self::error::{Error, Result};
-
-use std::net::SocketAddr;
+pub use config::*;
 
 use axum::{
     extract::{Path, Query},
@@ -15,28 +21,19 @@ use axum::{
     routing::{get, get_service},
     Json, Router,
 };
-use serde::Deserialize;
-use serde_json::json;
-use tower_cookies::CookieManagerLayer;
-use tower_http::services::ServeDir;
-
-// My custom modules following Anchor style conventions
-// use instructions::*;
-// pub mod instructions;
 use ctx::*; // Custom Extractor
 use error::*;
 use log::*;
 use model::*;
+use serde::Deserialize;
+use serde_json::json;
+use std::net::SocketAddr;
+use tower_cookies::CookieManagerLayer;
+use tower_http::services::ServeDir;
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 use web::*;
-
-pub mod ctx;
-pub mod error;
-pub mod log;
-pub mod model;
-pub mod web;
 
 #[tokio::main]
 async fn main() -> Result<()> {

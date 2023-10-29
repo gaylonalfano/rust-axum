@@ -5,7 +5,7 @@ use axum::{
 };
 use tower_http::services::ServeDir;
 
-const FRONTEND: &str = "frontend";
+use crate::config;
 
 // NOTE: Here we can just return a MethodRouter rather than a full Router
 // since ServeDir is a service.
@@ -14,7 +14,7 @@ pub fn serve_dir() -> MethodRouter {
         (StatusCode::NOT_FOUND, "Resource not found")
     }
 
-    any_service(ServeDir::new(FRONTEND).not_found_service(handle_404.into_service()))
+    any_service(ServeDir::new(&config().FRONTEND).not_found_service(handle_404.into_service()))
 }
 
 // -- OLD

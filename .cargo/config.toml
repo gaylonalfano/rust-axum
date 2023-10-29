@@ -10,3 +10,13 @@
 # NOTE: Convention is the Cargo.toml package.name goes
 # from "rust-web-app" -> "rust_web_app"
 RUST_LOG = "rust_axum=debug"
+
+# -- Service Environment Variables
+# IMPORTANT:
+#   For cargo commands only.
+#   For deployed env, should be managed by container (e.g, Kubernetes)
+
+## -- ConfigMap
+# This will be relative to Cargo.toml
+# In deployed images, should use absolute path.
+SERVICE_FRONTEND = "frontend/"

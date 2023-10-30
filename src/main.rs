@@ -1,5 +1,7 @@
 #![allow(unused)] // For beginners
 
+// #[cfg(test)] // Commented during early development
+pub mod _dev_utils;
 pub mod config;
 pub mod ctx;
 pub mod error;
@@ -43,6 +45,11 @@ async fn main() -> Result<()> {
         .with_target(false) // For simple tracing
         .with_env_filter(EnvFilter::from_default_env())
         .init();
+
+    // -- FOR DEV ONLY
+    // NOTE: We don't use '?' shorthand so it will fail if it
+    // doesn't initialize correctly.
+    _dev_utils::init_dev().await;
 
     // Initialize ModelManager
     let mm = ModelManager::new().await?;

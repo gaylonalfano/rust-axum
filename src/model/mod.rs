@@ -23,8 +23,10 @@
 //! - ModelManager are designed to be passed as an argument
 //!   to all Model Controllers functions.
 
-pub mod error;
-pub mod model_manager;
+mod error;
+mod model_manager;
 
+// Re-export our module Error and Result aliases
+// pub use self::error::{Error, Result};
 pub use error::*;
 pub use model_manager::*;

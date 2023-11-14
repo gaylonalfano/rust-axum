@@ -1,4 +1,6 @@
 #![allow(unused)] // For beginners
+                  // TODO: Pausing at the end of section 4. Going to
+                  // experiment with a simple Axum-Htmx
 
 // #[cfg(test)] // Commented during early development
 pub mod _dev_utils;

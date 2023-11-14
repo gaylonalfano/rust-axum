@@ -17,8 +17,8 @@ const PG_DEV_POSTGRES_URL: &str = "postgres://postgres:welcome@localhost/postgre
 const PG_DEV_APP_URL: &str = "postgres://app_user:dev_only_pwd@localhost/app_db";
 
 // sql files
-const SQL_RECREATE_DB: &str = "sql/dev_initial/00-recreate-db.sql"; // used with root postgres
-const SQL_DIR: &str = "sql/dev_initial"; // other files used with app_db
+const SQL_RECREATE_DB: &str = "sql/dev_initial/00-recreate-db.sql";
+const SQL_DIR: &str = "sql/dev_initial";
 
 // NOTE: The Box<dyn std::error::Error> we return is not using anyhow. This is a preference.
 // anyhow is used for examples and unit tests. This forces us to be
@@ -33,7 +33,7 @@ pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
     {
         let root_db = new_db_pool(PG_DEV_POSTGRES_URL).await?;
         pexec(&root_db, SQL_RECREATE_DB).await?;
-    } // <-- root_db dropped here
+    }
 
     // -- Get sql files
     let mut paths: Vec<PathBuf> = fs::read_dir(SQL_DIR)?
@@ -67,7 +67,7 @@ async fn pexec(db: &Db, file: &str) -> Result<(), sqlx::Error> {
     // -- Read the file
     let content = fs::read_to_string(file)?;
 
-    // FIXME: Make the split more sql proof
+    // FIXME: Make the split for sql proof
     let sqls: Vec<&str> = content.split(";").collect();
 
     for sql in sqls {

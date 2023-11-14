@@ -19,4 +19,4 @@ RUST_LOG = "rust_axum=debug"
 ## -- ConfigMap
 # This will be relative to Cargo.toml
 # In deployed images, should use absolute path.
-SERVICE_FRONTEND = "frontend/"
+SERVICE_WEB_FOLDER = "frontend/web-folder/"

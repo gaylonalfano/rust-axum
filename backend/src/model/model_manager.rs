@@ -19,7 +19,10 @@
 use axum::extract::FromRef;
 
 // use crate::model::ModelController;
-use crate::{Error, Result};
+use crate::model::{
+    store::{new_db_pool, Db},
+    Error, Result,
+};
 
 // NOTE: Multiple States structure example (ModelManager/AppState)
 // using FromRef trait (also a handy Axum macro)
@@ -43,16 +46,30 @@ pub struct ModelManager {
     // redis: RedisConnector,
     // s3: S3Bucket,
     // etc.
+    db: Db,
 }
 
 impl ModelManager {
+    /// Constructor
     pub async fn new() -> Result<Self> {
-        // FIXME: U: Removing this for now.
+        // NOTE: U: Removing this for now.
         // let mc = ModelController::new().await?;
+        let db = new_db_pool().await?;
 
         // Ok(ModelManager { mc })
-        Ok(ModelManager {})
+        Ok(ModelManager { db })
     }
-
-    // pub(in crate::model) fn db(&self) -> &Db {...}
+    // NOTE: Only want to expose our Db (the db pool) ONLY
+    // to the Model layer, and the 'new' accessible to other
+    // modules such as main.rs.
+    // E.g., If we tried from main.rs to use 'let db = mm.db()' it would fail!
+    // NOTE: To restrict a function to ONLY sub-modules (i.e., store, error, model)
+    // we use (in crate::model) syntax.
+    // NOTE: What we end up with is our ModelManager::new() is accessible to
+    // all other modules in the code base. Whereas ONLY the model layer
+    // has access to the store (Db). Specifically, this returns the
+    // sqlx db pool reference ONLY for the model layer.
+    pub(in crate::model) fn db(&self) -> &Db {
+        &self.db
+    }
 }

@@ -23,10 +23,17 @@
 //! - ModelManager are designed to be passed as an argument
 //!   to all Model Controllers functions.
 
+//! NOTE: We're adding a store layer as well. I believe
+//! it'll go inside the Model Manager as a Model Controller,
+//! but we'll see...
+
 mod error;
 mod model_manager;
+mod store;
 
 // Re-export our module Error and Result aliases
 // pub use self::error::{Error, Result};
 pub use error::*;
 pub use model_manager::*;
+
+use crate::model::store::{new_db_pool, Db};

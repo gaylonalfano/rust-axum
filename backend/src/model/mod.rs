@@ -30,6 +30,7 @@
 mod error;
 mod model_manager;
 mod store;
+pub mod task;
 
 // Re-export our module Error and Result aliases
 // pub use self::error::{Error, Result};

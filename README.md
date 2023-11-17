@@ -23,7 +23,7 @@ ALTER DATABASE postgres SET log_statement = 'all';
 app_db=# select * from "user";
 ```
 
-## Dev (REPL)
+## Dev (watch)
 
 > NOTE: Install `cargo-watch` with: `cargo install cargo-watch`.
 
@@ -37,4 +37,12 @@ cargo watch -qcw src/ -w .cargo/ -x "run"
 cargo watch -qcw examples/ -x "run --example quick_dev"
 ```
 
-## Unit Test (REPL)
+## Unit Test (watch)
+
+```sh
+cargo watch -qcx "test -- --nocapture"
+
+# Specific test with filter
+cargo watch -qcx "test model::task::tests::test_create_ok"
+
+```

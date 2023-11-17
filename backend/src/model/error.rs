@@ -15,6 +15,10 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[serde_as]
 #[derive(Debug, Serialize)]
 pub enum Error {
+    // NOTE: Adding a general model Error for when a get()
+    // from the db doesn't return an entity (db table row item)
+    EntityNotFound { entity: &'static str, id: i64 },
+
     // -- Modules
     // NOTE: When creating a new Model Manager, we add the Db as a
     // inner Model Controller property. However, when creating a new Db

@@ -1,3 +1,4 @@
+use crate::model::base::{self, DbBmc};
 use crate::model::{Error, Result};
 use crate::{ctx::Ctx, model::model_manager::ModelManager};
 use serde::{Deserialize, Serialize};
@@ -33,6 +34,10 @@ pub struct TaskForUpdate {
 // region: -- TaskBmc
 pub struct TaskBmc;
 
+impl DbBmc for TaskBmc {
+    const TABLE: &'static str = "task";
+}
+
 impl TaskBmc {
     // NOTE: Making create() very granular and efficient.
     // No need to return the full Task back. This also makes
@@ -54,16 +59,18 @@ impl TaskBmc {
         Ok(id)
     }
 
-    pub async fn get(_ctx: &Ctx, mm: &ModelManager, id: i64) -> Result<Task> {
+    pub async fn get(ctx: &Ctx, mm: &ModelManager, id: i64) -> Result<Task> {
+        base::get::<Self, _>(ctx, mm, id).await
+    }
+
+    pub async fn list(_ctx: &Ctx, mm: &ModelManager) -> Result<Vec<Task>> {
         let db = mm.db();
 
-        let task: Task = sqlx::query_as("SELECT * FROM task WHERE id = $1")
-            .bind(id)
-            .fetch_optional(db)
-            .await? // Fail if db error
-            .ok_or(Error::EntityNotFound { entity: "task", id })?;
+        let tasks: Vec<Task> = sqlx::query_as("SELECT * FROM task ORDER BY id")
+            .fetch_all(db)
+            .await?;
 
-        Ok(task)
+        Ok(tasks)
     }
 
     pub async fn delete(_ctx: &Ctx, mm: &ModelManager, id: i64) -> Result<()> {
@@ -115,6 +122,9 @@ mod tests {
         let fx_title = "test_create_ok title";
 
         // -- Exec
+        // NOTE: TIP: Use a debug print (println!("->> {task:?}")) at first
+        // to ensure you get the expected output, and THEN use
+        // the assert!() in the Check section.
         // Q: What's the difference between a Fixture and a Value?
         let task_c = TaskForCreate {
             title: fx_title.to_string(),
@@ -165,6 +175,35 @@ mod tests {
             ),
             "EntityNotFound not matching"
         );
+
+        Ok(())
+    }
+
+    #[serial]
+    #[tokio::test]
+    async fn test_list_ok() -> Result<()> {
+        // -- Setup & Fixtures
+        let mm = _dev_utils::init_test().await;
+        let ctx = Ctx::root_ctx();
+        let fx_titles = &["test_list_ok-task 01", "test_list_ok-task 02"];
+        _dev_utils::seed_tasks(&ctx, &mm, fx_titles).await?;
+
+        // -- Exec
+        let tasks = TaskBmc::list(&ctx, &mm).await?;
+
+        // -- Check
+        // NOTE: To ensure we're checking against the correct tasks,
+        // we're going to make sure the task titles match
+        let tasks: Vec<Task> = tasks
+            .into_iter()
+            .filter(|t| t.title.starts_with("test_list_ok-task"))
+            .collect();
+        assert_eq!(tasks.len(), 2, "Number of seeded tasks");
+
+        // -- Clean
+        for task in tasks.iter() {
+            TaskBmc::delete(&ctx, &mm, task.id).await?;
+        }
 
         Ok(())
     }

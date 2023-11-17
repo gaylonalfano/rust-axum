@@ -42,6 +42,9 @@ cargo watch -qcw examples/ -x "run --example quick_dev"
 ```sh
 cargo watch -qcx "test -- --nocapture"
 
+# All tests in a package
+cargo watch -qcx "test model::task::tests -- --nocapture"
+
 # Specific test with filter
 cargo watch -qcx "test model::task::tests::test_create_ok"
 

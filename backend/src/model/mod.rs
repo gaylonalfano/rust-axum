@@ -27,14 +27,15 @@
 //! it'll go inside the Model Manager as a Model Controller,
 //! but we'll see...
 
+mod base;
 mod error;
 mod model_manager;
 mod store;
 pub mod task;
 
 // Re-export our module Error and Result aliases
-// pub use self::error::{Error, Result};
-pub use error::*;
+pub use self::error::{Error, Result};
+// pub use error::*;
 pub use model_manager::*;
 
 use crate::model::store::{new_db_pool, Db};

@@ -5,7 +5,14 @@ mod dev_db;
 use tokio::sync::OnceCell;
 use tracing::info;
 
-use crate::model::ModelManager;
+use crate::{
+    ctx::Ctx,
+    model::{
+        self,
+        task::{Task, TaskBmc, TaskForCreate},
+        ModelManager,
+    },
+};
 
 /// Initialize environment for local development
 /// (for early development, will be called from main())
@@ -35,4 +42,28 @@ pub async fn init_test() -> ModelManager {
         .await;
 
     mm.clone()
+}
+
+/// Seed tasks table for testing
+pub async fn seed_tasks(ctx: &Ctx, mm: &ModelManager, titles: &[&str]) -> model::Result<Vec<Task>> {
+    // It's okay for our dev_utils to have a dependency on our model layer,
+    // but we wouldn't want it the other way around.
+    let mut tasks = Vec::new();
+
+    for title in titles {
+        let id = TaskBmc::create(
+            ctx,
+            mm,
+            TaskForCreate {
+                title: title.to_string(),
+            },
+        )
+        .await?;
+
+        let task = TaskBmc::get(ctx, mm, id).await?;
+
+        tasks.push(task);
+    }
+
+    Ok(tasks)
 }

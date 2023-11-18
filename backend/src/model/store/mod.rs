@@ -13,7 +13,7 @@ pub type Db = Pool<Postgres>;
 pub async fn new_db_pool() -> Result<Db> {
     PgPoolOptions::new()
         // FIXME: sqlx 0.7.x bug when running tests.
-        // Need to change max_connections(1) or it panics
+        // Need to change max_connections = 1 or it panics
         .max_connections(1)
         .connect(&config().DB_URL)
         .await

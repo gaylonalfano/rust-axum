@@ -2,6 +2,7 @@ use crate::model::base::{self, DbBmc};
 use crate::model::{Error, Result};
 use crate::{ctx::Ctx, model::model_manager::ModelManager};
 use serde::{Deserialize, Serialize};
+use sqlb::Fields;
 use sqlx::FromRow;
 
 // region: -- Task Types
@@ -11,21 +12,29 @@ use sqlx::FromRow;
 // to change the creator of a task, or read certain properties.
 // Therefore, we break up these structs to assist.
 /// Sent back from model layer
-#[derive(Debug, Clone, FromRow, Serialize)]
+#[derive(Debug, Clone, Fields, FromRow, Serialize)]
 pub struct Task {
     pub id: i64,
     pub title: String,
+    // -- sqlb example:
+    // #[field(skip)] // sqlb::Fields
+    // pub something_else: String,
+    //
+    // #[field(name = "description")] // sqlb::Fields
+    // #[sqlx(rename = "description")] // sqlx::FromRow
+    // pub desc: String,
 }
 
 /// Sent to model layer to update data structure
-#[derive(Deserialize)]
+// U: Adding Fields to assist with building SQL statements
+#[derive(Fields, Deserialize)]
 pub struct TaskForCreate {
     // Don't want users via API to change the 'id' prop
     pub title: String,
 }
 
 /// Sent to model layer to update data structure
-#[derive(Deserialize)]
+#[derive(Fields, Deserialize)]
 pub struct TaskForUpdate {
     pub title: Option<String>,
 }
@@ -44,50 +53,70 @@ impl TaskBmc {
     // our code reusable, since ctx and mm will be consistent for
     // other functions, but only the task type changes (task_c, task_u, etc.)
     // REF: https://youtu.be/3cA_mk4vdWY?t=3290
-    pub async fn create(_ctx: &Ctx, mm: &ModelManager, task_c: TaskForCreate) -> Result<i64> {
-        let db = mm.db();
+    pub async fn create(ctx: &Ctx, mm: &ModelManager, task_c: TaskForCreate) -> Result<i64> {
+        // NOTE: Annotations can be inferred, but the compiler will see that
+        // it's equivalent to: create::<TaskBmc, model::task::TaskForCreate>(ctx, mm, task_c)
+        base::create::<Self, _>(ctx, mm, task_c).await
 
-        // NOTE: TIP: Simple guard against SQL injection is to use parameters
-        // like ($1, $2) in your statements instead of raw values.
-        // NOTE: Use '_' generic but Rust will infer the type (i.e., 'Postgres')
-        let (id,) =
-            sqlx::query_as::<_, (i64,)>("INSERT INTO task (title) values ($1) returning id")
-                .bind(task_c.title)
-                .fetch_one(db)
-                .await?;
-
-        Ok(id)
+        // -- BEFORE base layer:
+        // let db = mm.db();
+        //
+        // // NOTE: TIP: Simple guard against SQL injection is to use parameters
+        // // like ($1, $2) in your statements instead of raw values.
+        // // NOTE: Use '_' generic but Rust will infer the type (i.e., 'Postgres')
+        // let (id,) =
+        //     sqlx::query_as::<_, (i64,)>("INSERT INTO task (title) values ($1) returning id")
+        //         .bind(task_c.title)
+        //         .fetch_one(db)
+        //         .await?;
+        //
+        // Ok(id)
     }
 
     pub async fn get(ctx: &Ctx, mm: &ModelManager, id: i64) -> Result<Task> {
         base::get::<Self, _>(ctx, mm, id).await
     }
 
-    pub async fn list(_ctx: &Ctx, mm: &ModelManager) -> Result<Vec<Task>> {
-        let db = mm.db();
+    pub async fn list(ctx: &Ctx, mm: &ModelManager) -> Result<Vec<Task>> {
+        base::list::<Self, _>(ctx, mm).await
 
-        let tasks: Vec<Task> = sqlx::query_as("SELECT * FROM task ORDER BY id")
-            .fetch_all(db)
-            .await?;
-
-        Ok(tasks)
+        // -- BEFORE base layer:
+        // let db = mm.db();
+        //
+        // let tasks: Vec<Task> = sqlx::query_as("SELECT * FROM task ORDER BY id")
+        //     .fetch_all(db)
+        //     .await?;
+        //
+        // Ok(tasks)
     }
 
-    pub async fn delete(_ctx: &Ctx, mm: &ModelManager, id: i64) -> Result<()> {
-        let db = mm.db();
+    pub async fn update(
+        ctx: &Ctx,
+        mm: &ModelManager,
+        id: i64,
+        task_u: TaskForUpdate,
+    ) -> Result<()> {
+        base::update::<Self, _>(ctx, mm, id, task_u).await
+    }
 
-        let count = sqlx::query("DELETE FROM task WHERE id = $1")
-            .bind(id)
-            .execute(db)
-            .await?
-            .rows_affected();
-        // assert_eq!(count, 1, "Did not delete 1 row?");
+    pub async fn delete(ctx: &Ctx, mm: &ModelManager, id: i64) -> Result<()> {
+        base::delete::<Self>(ctx, mm, id).await
 
-        if count == 0 {
-            return Err(Error::EntityNotFound { entity: "task", id });
-        }
-
-        Ok(())
+        // -- BEFORE base layer:
+        // let db = mm.db();
+        //
+        // let count = sqlx::query("DELETE FROM task WHERE id = $1")
+        //     .bind(id)
+        //     .execute(db)
+        //     .await?
+        //     .rows_affected();
+        // // assert_eq!(count, 1, "Did not delete 1 row?");
+        //
+        // if count == 0 {
+        //     return Err(Error::EntityNotFound { entity: "task", id });
+        // }
+        //
+        // Ok(())
     }
 }
 // endregion: -- TaskBmc
@@ -204,6 +233,39 @@ mod tests {
         for task in tasks.iter() {
             TaskBmc::delete(&ctx, &mm, task.id).await?;
         }
+
+        Ok(())
+    }
+
+    #[serial]
+    #[tokio::test]
+    async fn test_update_ok() -> Result<()> {
+        // -- Setup & Fixtures
+        let mm = _dev_utils::init_test().await;
+        let ctx = Ctx::root_ctx();
+        let fx_title = "test_update_ok - task 01";
+        let fx_title_new = "test_update_ok - task 01 - new";
+        let fx_task = _dev_utils::seed_tasks(&ctx, &mm, &[fx_title])
+            .await?
+            .remove(0);
+
+        // -- Exec
+        TaskBmc::update(
+            &ctx,
+            &mm,
+            fx_task.id,
+            TaskForUpdate {
+                title: Some(fx_title_new.to_string()),
+            },
+        )
+        .await?;
+
+        // -- Check
+        let task = TaskBmc::get(&ctx, &mm, fx_task.id).await?;
+        assert_eq!(task.title, fx_title_new);
+
+        // -- Clean
+        TaskBmc::delete(&ctx, &mm, task.id).await?;
 
         Ok(())
     }

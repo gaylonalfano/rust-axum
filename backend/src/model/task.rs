@@ -192,6 +192,8 @@ mod tests {
 
         // -- Exec
         let res = TaskBmc::get(&ctx, &mm, fx_id).await;
+
+        // -- Check
         // Q: How to assert we get the intended Error from our Result?
         // A: Use assert!(matches!(...)) macros!
         assert!(

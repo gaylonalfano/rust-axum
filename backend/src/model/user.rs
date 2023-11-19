@@ -133,7 +133,9 @@ mod tests {
         let fx_username = "demo1";
 
         // -- Exec
-        let user: User = UserBmc::first_by_username(&ctx, &mm, fx_username)
+        // NOTE: Cool thing is we can have user be UserForLogin or UserForAuth because
+        // they ALL impl for<'r> FromRow<'r> + HasFields + Unpin + Send! Neat!
+        let user: UserForLogin = UserBmc::first_by_username(&ctx, &mm, fx_username)
             .await?
             .context("Should have user 'demo1'")?;
 

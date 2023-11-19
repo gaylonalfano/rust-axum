@@ -2,14 +2,16 @@
                   // TODO: Pausing at the end of section 4. Going to
                   // experiment with a simple Axum-Htmx
 
+mod config;
+mod crypt;
+mod ctx;
+mod error;
+mod log;
+mod model;
+mod web;
+
 // #[cfg(test)] // Commented during early development
 pub mod _dev_utils;
-pub mod config;
-pub mod ctx;
-pub mod error;
-pub mod log;
-pub mod model;
-pub mod web;
 
 // Re-export our new custom Error and Result from error.rs
 // We now have a crate Error and crate Result we can import

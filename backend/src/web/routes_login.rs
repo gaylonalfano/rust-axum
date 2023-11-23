@@ -1,5 +1,13 @@
-use crate::web::{self, Error, Result};
-use axum::{routing::post, Json, Router};
+use crate::{
+    crypt::pwd,
+    ctx::Ctx,
+    model::{
+        user::{UserBmc, UserForLogin},
+        ModelManager,
+    },
+    web::{self, Error, Result},
+};
+use axum::{extract::State, routing::post, Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tower_cookies::{Cookie, Cookies};
@@ -7,18 +15,68 @@ use tracing::debug;
 
 // Common practice is to create a fn that returns the module Router
 // and then merge(web::routes_login::routes()) inside main
-pub fn routes() -> Router {
-    Router::new().route("/api/login", post(api_login_handler))
+// NOTE: U: Adding ModelManager to the routes so we can add AppState
+// using with_state() for real db/auth login logic. We then use
+// Axum's State extractor in the handlers. From main.rs, we simply
+// just pass mm.clone() to the router.
+pub fn routes(mm: ModelManager) -> Router {
+    Router::new()
+        .route("/api/login", post(api_login_handler))
+        .with_state(mm)
 }
 
 // NOTE: We can return our crate::Result bc Error has impl into_response()
-async fn api_login_handler(cookies: Cookies, payload: Json<LoginPayload>) -> Result<Json<Value>> {
-    debug!(" {:<12} - api_login_handler", "HANDLER");
+// NOTE: U: After adding with_state(mm) to the route, we can now use
+// Axum's State(mm) extractor to give us access the UserBmc for logging in.
+async fn api_login_handler(
+    State(mm): State<ModelManager>,
+    cookies: Cookies,
+    Json(payload): Json<LoginPayload>,
+) -> Result<Json<Value>> {
+    debug!("{:<12} - api_login_handler", "HANDLER");
 
-    // TODO: Implement real db/auth logic
-    if payload.username != "demo1" || payload.pwd != "welcome" {
-        return Err(Error::LoginFail);
-    }
+    // -- Get payload & System user (Ctx::root_ctx())
+    let LoginPayload {
+        username,
+        pwd: pwd_clear,
+    } = payload;
+    // Obtain our root Ctx to get the system user for login, since
+    // this current user cannot be used (currently trying to log in)
+    let root_ctx = Ctx::root_ctx();
+
+    // -- Get the current User
+    // NOTE: !! - We don't want to capture/log the username anywhere!
+    // Sometimes users accidentally enter their pwd for their username.
+    // This makes it harder for us to debug, but it's necessary.
+    // NOTE: Our handler returns a web module Result, which will return
+    // a web layer Error (.await?) if Err variant. We need to let it convert from a
+    // web Error -> model Error. To do this, we need to update our web::error
+    // sub module and impl From<model::Error> for Error (web).
+    let user: UserForLogin = UserBmc::first_by_username(&root_ctx, &mm, &username)
+        .await?
+        .ok_or(Error::LoginFailUsernameNotFound)?;
+    let user_id = user.id;
+
+    // -- Validate the password
+    // NOTE: let-else pattern for adding a guard on password
+    let Some(pwd) = user.pwd else {
+        return Err(Error::LoginFailUserHasNoPwd { user_id });
+    };
+
+    pwd::validate_pwd(
+        &crate::crypt::EncryptContent {
+            content: pwd_clear.clone(),
+            salt: user.pwd_salt.to_string(),
+        },
+        &pwd,
+    )
+    .map_err(|_| Error::LoginFailPwdNotMatching { user_id })?;
+
+    // // -- Fake Login:
+    // // TODO: Implement real db/auth logic
+    // if payload.username != "demo1" || payload.pwd != "welcome" {
+    //     return Err(Error::LoginFail);
+    // }
 
     // TODO: Implement real auth-token generation/signature
     // Set cookies using Tower's CookieManagerLayer extractor

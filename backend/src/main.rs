@@ -33,7 +33,7 @@ use log::*;
 use model::*;
 use serde::Deserialize;
 use serde_json::json;
-use std::net::SocketAddr;
+use std::{env, net::SocketAddr};
 use tower_cookies::CookieManagerLayer;
 use tower_http::services::ServeDir;
 use tracing::{debug, info};
@@ -43,6 +43,9 @@ use web::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Enable RUST_BACKTRACE
+    env::set_var("RUST_BACKTRACE", "1");
+
     // Tracing
     tracing_subscriber::fmt()
         .without_time() // E.g. 2023-10-28T13:01:17.945497Z
@@ -69,7 +72,7 @@ async fn main() -> Result<()> {
     // // REF: https://tokio.rs/blog/2021-05-14-inventing-the-service-trait
     let routes_all = Router::new()
         .merge(routes_hello())
-        .merge(routes_login::routes())
+        .merge(routes_login::routes(mm.clone()))
         // NOTE: By nesting (merging), we are basically attaching a subrouter
         // .nest("/api", routes_api)
         .layer(middleware::map_response(mw_response_map))

@@ -1,3 +1,4 @@
+use crate::crypt::{pwd, EncryptContent};
 use crate::ctx::Ctx;
 use crate::model::base::{self, DbBmc};
 use crate::model::ModelManager;
@@ -23,7 +24,7 @@ pub struct User {
 #[derive(Deserialize)]
 pub struct UserForCreate {
     pub username: String,
-    pub pwd_clear: String,
+    pub pwd_clear: String, // Raw, unsalted, unhashed pwd (eg "welcome")
 }
 
 // NOTE: For user module impl. (e.g., inside UserBmc::create fn)
@@ -37,8 +38,8 @@ struct UserForInsert {
 // Used for log in logic
 #[derive(Clone, FromRow, Fields, Debug)]
 pub struct UserForLogin {
-    id: i64,
-    username: String,
+    pub id: i64,
+    pub username: String,
 
     // -- pwd and token info
     // NOTE: TIP: It's best to encode/embed your scheme
@@ -53,8 +54,8 @@ pub struct UserForLogin {
 // Kind of a subset of the UserForLogin
 #[derive(Clone, FromRow, Fields, Debug)]
 pub struct UserForAuth {
-    id: i64,
-    username: String,
+    pub id: i64,
+    pub username: String,
 
     // --token info
     pub token_salt: Uuid,
@@ -110,6 +111,27 @@ impl UserBmc {
             .await?;
 
         Ok(user)
+    }
+
+    pub async fn update_pwd(ctx: &Ctx, mm: &ModelManager, id: i64, pwd_clear: &str) -> Result<()> {
+        let db = mm.db();
+
+        // Assumes we already have the user id
+        let user: UserForLogin = Self::get(ctx, mm, id).await?;
+
+        let pwd = pwd::encrypt_pwd(&EncryptContent {
+            content: pwd_clear.to_string(),
+            salt: user.pwd_salt.to_string(),
+        })?;
+
+        sqlb::update()
+            .table(Self::TABLE)
+            .and_where("id", "=", id)
+            .data(vec![("pwd", pwd.to_string()).into()])
+            .exec(db)
+            .await?;
+
+        Ok(())
     }
 }
 

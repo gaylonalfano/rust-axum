@@ -7,6 +7,14 @@ use std::{fs, path::PathBuf, time::Duration};
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use tracing::info;
 
+use crate::{
+    ctx::Ctx,
+    model::{
+        user::{User, UserBmc},
+        ModelManager,
+    },
+};
+
 // Jeremy likes a type alias
 type Db = Pool<Postgres>;
 
@@ -19,6 +27,8 @@ const PG_DEV_APP_URL: &str = "postgres://app_user:dev_only_pwd@localhost/app_db"
 // sql files
 const SQL_RECREATE_DB: &str = "sql/dev_initial/00-recreate-db.sql";
 const SQL_DIR: &str = "sql/dev_initial";
+
+const DEMO_PWD: &str = "welcome";
 
 // NOTE: The Box<dyn std::error::Error> we return is not using anyhow. This is a preference.
 // anyhow is used for examples and unit tests. This forces us to be
@@ -55,6 +65,21 @@ pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
+    // -- Initialize model layer
+    let mm = ModelManager::new().await?;
+    let ctx = Ctx::root_ctx();
+
+    // -- Set demo1 pwd
+    // NOTE: We create a "demo1" user inside our sql 02-dev-seed.sql file,
+    // so this is just getting the user from the db and then using our
+    // custom update_pwd(). Log in to psql and select * from "users"; to
+    // see the updated encrypted password.
+    let demo1_user: User = UserBmc::first_by_username(&ctx, &mm, "demo1")
+        .await?
+        .unwrap();
+    UserBmc::update_pwd(&ctx, &mm, demo1_user.id, DEMO_PWD).await?;
+    info!("{:<12} - init_dev_db - set demo1 pwd", "FOR-DEV-ONLY");
 
     Ok(())
 }

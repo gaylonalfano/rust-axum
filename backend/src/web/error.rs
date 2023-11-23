@@ -5,7 +5,7 @@
 // we had to impl IntoResponse again and again. By making
 // only this web crate to know of Axum's IntoResponse, can make
 // it easier to change later on as we add more.
-use crate::web;
+use crate::{model, web};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -28,17 +28,38 @@ pub type Result<T> = core::result::Result<T, Error>;
 pub enum Error {
     // -- Login
     LoginFail,
+    LoginFailUsernameNotFound,
+    // NOTE: TIP: Use struct variant (instead of tuple) to make
+    // clear the actual value: LoginFail { user_id: i64 }.
+    // Use tuple when simply holding/encapsulating the name of
+    // the variant: Model(model::Error)
+    LoginFailUserHasNoPwd { user_id: i64 },
+    LoginFailPwdNotMatching { user_id: i64 },
 
     // -- CtxExtError
     CtxExt(web::mw_auth::CtxExtError),
+
+    // -- Modules
+    Model(model::Error),
 }
 
+// region:       -- Froms
+// NOTE: To allow the compiler to go from a Model Error to a Web Error,
+// we have to impl From trait
+impl From<model::Error> for Error {
+    fn from(value: model::Error) -> Self {
+        Self::Model(value)
+    }
+}
+// endregion:    -- Froms
+
+// region:       -- Axum IntoResponse
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         // NOTE: NEVER pass server errors to client! For security reasons,
         // you want the lazy path being the safe path. So by default, if we
         // don't put extrawork , we don't send extra info to the client.
-        debug!(" {:<12} - model::Error {self:?}", "INTO_RESPONSE");
+        debug!("{:<12} - model::Error {self:?}", "INTO_RESPONSE");
 
         // U: First creating a placeholder Axum response rather than returning
         // a full error response.
@@ -50,6 +71,7 @@ impl IntoResponse for Error {
         response
     }
 }
+// endregion:    -- Axum IntoResponse
 
 // region:  -- Error boilerplate (Optional)
 impl std::fmt::Display for Error {
@@ -62,21 +84,28 @@ impl std::error::Error for Error {}
 // end region:  -- Error boilerplate
 
 // region: -- Client Error
-
 /// Convert from the root server error to the http status code and ClientError
 impl Error {
+    // NOTE: This allows us to customize what gets sent back to the Client whenever
+    // we have certain server errors, since you don't want to send all for security.
     pub fn client_status_and_error(&self) -> (StatusCode, ClientError) {
+        // Bring our structs, enums, etc. into scope
+        use web::Error::*;
+
         // NOTE: Optional #[allow(unreachable_patterns)] for when
         // fallback is unreachable? Not sure but it's optional. Could argue
         // you should be strict and exhaust all variants.
         #[allow(unreachable_patterns)]
         match self {
-            // - Login/Auth
-            // TODO: Revise our Server side LoginFail Error and DON'T send
-            // back to client side for security
-            web::Error::CtxExt(_) => (StatusCode::FORBIDDEN, ClientError::NO_AUTH),
+            // -- Login
+            LoginFailUsernameNotFound
+            | LoginFailUserHasNoPwd { .. }
+            | LoginFailPwdNotMatching { .. } => (StatusCode::FORBIDDEN, ClientError::LOGIN_FAIL),
 
-            // - Fallback
+            // -- Auth
+            CtxExt(_) => (StatusCode::FORBIDDEN, ClientError::NO_AUTH),
+
+            // -- Fallback
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ClientError::SERVICE_ERROR,

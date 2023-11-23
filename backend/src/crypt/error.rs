@@ -7,8 +7,11 @@ pub type Result<T> = core::result::Result<T, Error>;
 // to serialize into the JSON data format.
 #[derive(Debug, Serialize)]
 pub enum Error {
-    // Key
+    // -- Key
     KeyFailHmac,
+
+    // -- Pwd
+    PwdNotMatching,
 }
 
 // region: -- Error Boilerplate

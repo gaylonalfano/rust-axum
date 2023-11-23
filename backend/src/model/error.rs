@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
 
-use crate::model::store;
+use crate::{crypt, model::store};
 
 // NOTE: Error handling best practice/normalization
 // REF: https://youtu.be/XZtlD_m59sM
@@ -26,6 +26,7 @@ pub enum Error {
     // return is the store module's Error, NOT model module's Error.
     // Therefore, we need to expand this model Error to have a specific
     // 'store' module inner variant.
+    Crypt(crypt::Error),
     Store(store::Error),
 
     // -- Externals
@@ -35,19 +36,26 @@ pub enum Error {
 
 // region: -- Froms
 // Help convert these errors into the 'model' module Error
+// NOTE: To allow the compiler to go from a Db Error to a Model Error,
+// we have to impl From trait
+impl From<crypt::Error> for Error {
+    fn from(value: crypt::Error) -> Self {
+        Self::Crypt(value)
+    }
+}
+
+impl From<store::Error> for Error {
+    fn from(value: store::Error) -> Self {
+        Self::Store(value)
+    }
+}
+
 impl From<sqlx::Error> for Error {
     fn from(value: sqlx::Error) -> Self {
         Self::Sqlx(value)
     }
 }
 
-// NOTE: To allow the compiler to go from a Db Error to a Model Error,
-// we have to impl From trait
-impl From<store::Error> for Error {
-    fn from(value: store::Error) -> Self {
-        Self::Store(value)
-    }
-}
 // endregion: -- Froms
 
 // region:  -- Error boilerplate (Optional)

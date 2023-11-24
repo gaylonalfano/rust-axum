@@ -43,6 +43,8 @@ async-trait = "0.1"
 # -- Errors
 strum_macros = "0.25"
 uuid = { version = "1", features = ["v4", "fast-rng"] }
+# -- Others
+time = "0.3"
 
 [dev-dependencies]
 anyhow = "1"

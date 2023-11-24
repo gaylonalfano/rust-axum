@@ -41,6 +41,9 @@ pub async fn mw_ctx_require<B>(
 // NOTE: At a high level, we don't want this fn to fail. Instead, we want
 // to capture the errors and still continue processing next Middleware.
 // This allows other MW or handlers to manage the error as needed.
+// NOTE: U: Here's an overview of our auth resolve middleware after
+// we implemented api/login password encryption and validation:
+// REF: https://youtu.be/3cA_mk4vdWY?t=8732
 pub async fn mw_ctx_resolve<B>(
     // NOTE: Eventually you'll want to access the State ModelController,
     // which will have our database

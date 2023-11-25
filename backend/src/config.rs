@@ -1,3 +1,4 @@
+use crate::utils::b64u_decode;
 use crate::{Error, Result};
 use std::{env, str::FromStr, sync::OnceLock};
 
@@ -65,7 +66,7 @@ fn get_env(name: &'static str) -> Result<String> {
 
 fn get_env_base64url_as_u8s(name: &'static str) -> Result<Vec<u8>> {
     // decode() has its own error, but to use our own custom error, we can use map_err()
-    base64_url::decode(&get_env(name)?).map_err(|_| Error::ConfigWrongFormat(name))
+    b64u_decode(&get_env(name)?).map_err(|_| Error::ConfigWrongFormat(name))
 }
 
 // NOTE: Using a general parse<T: FromStr> so we can return multiple

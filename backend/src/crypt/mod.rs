@@ -4,6 +4,7 @@ pub mod pwd;
 
 pub use self::error::{Error, Result};
 
+use crate::utils::b64u_encode;
 use hmac::{Hmac, Mac};
 use sha2::Sha512;
 // endregion: -- Modules
@@ -37,7 +38,7 @@ pub fn encrypt_into_base64url(key: &[u8], enc_content: &EncryptContent) -> Resul
 
     // -- Finalize and b64u encode
     let hmac_result = hmac_sha512.finalize();
-    let result = base64_url::encode(&hmac_result.into_bytes());
+    let result = b64u_encode(hmac_result.into_bytes());
 
     Ok(result)
 }

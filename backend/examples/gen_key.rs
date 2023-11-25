@@ -1,4 +1,5 @@
 use anyhow::Result;
+use base64::engine::{general_purpose, Engine};
 use rand::RngCore;
 
 // NOTE: Run this using: `cargo run --example gen_key`
@@ -11,7 +12,7 @@ fn main() -> Result<()> {
     println!("\nGenerated key for HMAC:\n{key:?}");
 
     // Normalize the bytes array into base64url string for safe character set
-    let b64u = base64_url::encode(&key);
+    let b64u = general_purpose::URL_SAFE_NO_PAD.encode(&key);
     println!("\nKey b64u encoded:\n{b64u}");
 
     Ok(())

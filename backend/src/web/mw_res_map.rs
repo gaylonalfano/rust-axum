@@ -20,7 +20,7 @@ pub async fn mw_response_map(
     req_method: Method,
     res: Response,
 ) -> Response {
-    debug!(" {:<12} - mw_response_map", "RES_MAPPER");
+    debug!("{:<12} - mw_response_map", "RES_MAPPER");
     // Create a uuid to match our server errors to client errors
     let uuid = Uuid::new_v4();
 

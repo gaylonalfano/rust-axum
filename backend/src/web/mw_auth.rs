@@ -27,7 +27,7 @@ pub async fn mw_ctx_require<B>(
     req: Request<B>,
     next: Next<B>,
 ) -> Result<Response> {
-    debug!(" {:<12} - mw_ctx_require", "MIDDLEWARE");
+    debug!("{:<12} - mw_ctx_require", "MIDDLEWARE");
 
     // Extract the Ctx using our custom Extractor that's implemented
     // the FromRequestParts trait. Now we can use this extractor
@@ -52,7 +52,7 @@ pub async fn mw_ctx_resolve<B>(
     mut req: Request<B>,
     next: Next<B>,
 ) -> Result<Response> {
-    debug!(" {:<12} - mw_ctx_resolve", "MIDDLEWARE");
+    debug!("{:<12} - mw_ctx_resolve", "MIDDLEWARE");
 
     let auth_token = cookies.get(AUTH_TOKEN).map(|c| c.value().to_string());
 
@@ -93,7 +93,7 @@ impl<S: Send + Sync> FromRequestParts<S> for Ctx {
     // NOTE: Recall that our custom Result type still handles the Error (Rejection),
     // we just don't have to specify Result<Self, Self::Rejection>
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self> {
-        debug!(" {:<12} - Ctx", "EXTRACTOR");
+        debug!("{:<12} - Ctx", "EXTRACTOR");
 
         // region: -- NEW Cookies and token components validation
         // U: After removing our previous code, we can now simply get our

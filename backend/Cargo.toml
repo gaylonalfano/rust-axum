@@ -35,7 +35,7 @@ serde_with = "3"
 rand = "0.8"
 hmac = "0.12"
 sha2 = "0.10"
-base64-url = "2"
+base64 = "0.21"
 # -- Cookies parsing
 lazy-regex = "3"
 # -- Ctx Extractor

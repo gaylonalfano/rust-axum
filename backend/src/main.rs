@@ -109,7 +109,7 @@ struct HelloParams {
 // Using Axum's Query extractor helper that deserializes query strings into some type
 // e.g., `/hello?name=Mario` -- as a query string
 async fn handler_hello(Query(params): Query<HelloParams>) -> impl IntoResponse {
-    debug!(" {:<12} - handler_hello - {params:?}", "HANDLER");
+    debug!("{:<12} - handler_hello - {params:?}", "HANDLER");
 
     let name = params.name.as_deref().unwrap_or("World");
 
@@ -118,7 +118,7 @@ async fn handler_hello(Query(params): Query<HelloParams>) -> impl IntoResponse {
 
 // e.g., `/hello2/Mario` -- as a path
 async fn handler_hello2(Path(name): Path<String>) -> impl IntoResponse {
-    debug!(" {:<12} - handler_hello2 - {name:?}", "HANDLER");
+    debug!("{:<12} - handler_hello2 - {name:?}", "HANDLER");
 
     Html(format!("Hello2 <strong>{name}!</strong>"))
 }

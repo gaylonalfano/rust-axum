@@ -5,7 +5,7 @@
 // we had to impl IntoResponse again and again. By making
 // only this web crate to know of Axum's IntoResponse, can make
 // it easier to change later on as we add more.
-use crate::{model, web};
+use crate::{crypt, model, web};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -40,10 +40,17 @@ pub enum Error {
     CtxExt(web::mw_auth::CtxExtError),
 
     // -- Modules
+    Crypt(crypt::Error),
     Model(model::Error),
 }
 
 // region:       -- Froms
+impl From<crypt::Error> for Error {
+    fn from(value: crypt::Error) -> Self {
+        Self::Crypt(value)
+    }
+}
+
 // NOTE: To allow the compiler to go from a Model Error to a Web Error,
 // we have to impl From trait
 impl From<model::Error> for Error {

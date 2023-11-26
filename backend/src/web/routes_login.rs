@@ -78,10 +78,13 @@ async fn api_login_handler(
     //     return Err(Error::LoginFail);
     // }
 
-    // TODO: Implement real auth-token generation/signature
-    // Set cookies using Tower's CookieManagerLayer extractor
+    // -- Set web token cookies using Tower's CookieManagerLayer extractor
     // We'll use a format of: "user-{id}.{expire_date}.{signature}"
-    cookies.add(Cookie::new(web::AUTH_TOKEN, "user-1.exp.sign"));
+    // - OLD:
+    // cookies.add(Cookie::new(web::AUTH_TOKEN, "user-1.exp.sign"));
+    // - U: With auth-token gen/sign:
+    // REF: https://youtu.be/3cA_mk4vdWY?t=10449
+    web::set_token_cookie(&cookies, &user.username, &user.token_salt.to_string())?;
 
     // Create the success body
     let body = Json(json!({

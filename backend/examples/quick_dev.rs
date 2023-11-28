@@ -21,13 +21,13 @@ async fn main() -> Result<()> {
     // NOTE: In a separate terminal we run:
     // $> cargo watch -q -c -w src/ -x run
     // NOTE: -q quiet, -c clear, -w watch, -x execute
-    http_client
-        .do_get("/hello?name=Mario")
-        .await?
-        .print()
-        .await?;
-
-    http_client.do_get("/hello2/Luigi").await?.print().await?;
+    // http_client
+    //     .do_get("/hello?name=Mario")
+    //     .await?
+    //     .print()
+    //     .await?;
+    //
+    // http_client.do_get("/hello2/Luigi").await?.print().await?;
 
     // U: We want to add authentication before we're able to
     // perform any CRUD methods. To do this, we're adding middleware (mw_auth.rs)
@@ -40,6 +40,18 @@ async fn main() -> Result<()> {
     );
     // NOTE: Comment out this to test out some error logging
     req_login.await?.print().await?;
+
+    let req_logoff = http_client.do_post(
+        "/api/logoff",
+        json!({
+            "logoff": true
+        }),
+    );
+    req_logoff.await?.print().await?;
+
+    // NOTE: Move this before or after /api/login to see how
+    // mw_ctx_resolve & mw_ctx_require work.
+    http_client.do_get("/hello").await?.print().await?;
 
     Ok(())
 }

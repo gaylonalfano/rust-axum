@@ -27,12 +27,24 @@ fn set_token_cookie(cookies: &Cookies, user: &str, salt: &str) -> Result<()> {
     let token = generate_web_token(user, salt)?;
 
     let mut cookie = Cookie::new(AUTH_TOKEN, token.to_string());
+    // NOTE: set_http_only means JS won't be able to access it
     cookie.set_http_only(true);
     // NOTE: !! - Must set cookie path to root "/" because it will default
     // to path of the request (ie. 'api/login')
     cookie.set_path("/");
 
     cookies.add(cookie);
+
+    Ok(())
+}
+
+fn remove_token_cookie(cookies: &Cookies) -> Result<()> {
+    let mut cookie = Cookie::named(AUTH_TOKEN);
+    // NOTE: !! - Must set cookie path to root "/" because it will default
+    // to path of the request (e.g., 'api/login')
+    cookie.set_path("/");
+
+    cookies.remove(cookie);
 
     Ok(())
 }

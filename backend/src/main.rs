@@ -72,8 +72,8 @@ async fn main() -> Result<()> {
     // // REF: https://youtu.be/Wnb_n5YktO8?t=1850
     // // REF: https://tokio.rs/blog/2021-05-14-inventing-the-service-trait
     let routes_all = Router::new()
-        .merge(routes_hello())
         .merge(routes_login::routes(mm.clone()))
+        .merge(routes_hello())
         // NOTE: By nesting (merging), we are basically attaching a subrouter
         // .nest("/api", routes_api)
         .layer(middleware::map_response(mw_response_map))
@@ -84,7 +84,7 @@ async fn main() -> Result<()> {
 
     // region:  --- Start Server
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    info!("->> {:<12} - {addr}\n", "LISTENING");
+    info!("{:<12} - {addr}\n", "LISTENING");
     axum::Server::bind(&addr)
         .serve(routes_all.into_make_service())
         .await
@@ -99,6 +99,7 @@ fn routes_hello() -> Router {
     Router::new()
         .route("/hello", get(handler_hello))
         .route("/hello2/:name", get(handler_hello2))
+        .route_layer(middleware::from_fn(mw_ctx_require))
 }
 
 #[derive(Debug, Deserialize)]

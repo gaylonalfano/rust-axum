@@ -9,6 +9,8 @@ use super::{encrypt_into_base64url, EncryptContent};
 
 // FIXME: Complicated topic. Watch for the general Web Token strategy:
 // REF: https://youtu.be/-9K7zNgsbP0
+// FIXME: Q: Is there a resource that Jeremy can provide that details
+// what's needed for web token authentication?
 
 // region:       -- Token Type
 

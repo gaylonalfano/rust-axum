@@ -40,7 +40,7 @@ pub async fn mw_response_map(
                 }
             });
 
-            debug!("   ->> client error body: {client_error_body}");
+            debug!("CLIENT ERROR BODY: {client_error_body}");
 
             // Build the new reponse from the client_error_body
             // NOTE:Recall we expanded into_response() to be a Axum Response

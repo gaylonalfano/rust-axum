@@ -5,7 +5,7 @@ use crate::{
         user::{UserBmc, UserForLogin},
         ModelManager,
     },
-    web::{self, Error, Result},
+    web::{self, remove_token_cookie, Error, Result},
 };
 use axum::{extract::State, routing::post, Json, Router};
 use serde::Deserialize;
@@ -19,12 +19,15 @@ use tracing::debug;
 // using with_state() for real db/auth login logic. We then use
 // Axum's State extractor in the handlers. From main.rs, we simply
 // just pass mm.clone() to the router.
+// NOTE: U: Adding new logoff route
 pub fn routes(mm: ModelManager) -> Router {
     Router::new()
         .route("/api/login", post(api_login_handler))
+        .route("/api/logoff", post(api_logoff_handler))
         .with_state(mm)
 }
 
+// region:       -- Login
 // NOTE: We can return our crate::Result bc Error has impl into_response()
 // NOTE: U: After adding with_state(mm) to the route, we can now use
 // Axum's State(mm) extractor to give us access the UserBmc for logging in.
@@ -102,3 +105,35 @@ struct LoginPayload {
     username: String,
     pwd: String,
 }
+// endregion:    -- Login
+
+// region:       -- Logoff
+async fn api_logoff_handler(
+    cookies: Cookies,
+    Json(payload): Json<LogoffPayload>,
+) -> Result<Json<Value>> {
+    debug!("{:<12} - api_logoff_handler", "HANDLER");
+    let should_logoff = payload.logoff;
+
+    if should_logoff {
+        remove_token_cookie(&cookies)?;
+    }
+
+    // Create the success body
+    let body = Json(json!({
+        "result": {
+        "logged_off": should_logoff
+    }
+    }));
+
+    Ok(body)
+}
+
+// NOTE: It's a silly struct but we want the logoff to be a POST request,
+// and we want it in JSON. TL;DR - Content Application/JSON POST are PREFLIGHTED
+// by the browser, so there is some cross-site scripting protection.
+#[derive(Debug, Deserialize)]
+struct LogoffPayload {
+    logoff: bool,
+}
+// endregion:    -- Logoff

@@ -8,13 +8,15 @@ use serde::Serialize;
 use tower_cookies::{Cookie, Cookies};
 use tracing::debug;
 
+use crate::crypt::token::{validate_web_token, Token};
 use crate::ctx::Ctx;
+use crate::model::user::{UserBmc, UserForAuth};
 use crate::model::ModelManager;
-use crate::web::{Error, Result, AUTH_TOKEN};
+use crate::web::{set_token_cookie, Error, Result, AUTH_TOKEN};
 
 pub async fn mw_ctx_require<B>(
     // cookies: Cookies,
-    // NOTE: U: The BIG idea of Ctx is we're going to use it for privileges and access control,
+    // NOTE: !!: The BIG idea of Ctx is we're going to use it for privileges and access control,
     // at both the web layer and the model layer (access control?). So, Ctx is going to be
     // added as an argument to our web handlers and at the model layer as well.
     // NOTE: We can inject our custom Extractor in many ways (Option<Ctx>, Result<Ctx>, or directly
@@ -27,7 +29,7 @@ pub async fn mw_ctx_require<B>(
     req: Request<B>,
     next: Next<B>,
 ) -> Result<Response> {
-    debug!("{:<12} - mw_ctx_require", "MIDDLEWARE");
+    debug!("{:<12} - mw_ctx_require - {ctx:?}", "MIDDLEWARE");
 
     // Extract the Ctx using our custom Extractor that's implemented
     // the FromRequestParts trait. Now we can use this extractor
@@ -44,37 +46,76 @@ pub async fn mw_ctx_require<B>(
 // NOTE: U: Here's an overview of our auth resolve middleware after
 // we implemented api/login password encryption and validation:
 // REF: https://youtu.be/3cA_mk4vdWY?t=8732
+// NOTE: U: We're going to do the heavy lifting of token validation here:
+// 1. We'll use the ModelManager to access the DB to get the UserForAuth.
+// 2. Tower Cookies to set the cookies
+// 3. Set the Request Result (CtxExtResult), which is later retreived via
+// Request Extensions from_request_parts.
 pub async fn mw_ctx_resolve<B>(
-    // NOTE: Eventually you'll want to access the State ModelController,
-    // which will have our database
-    _mm: State<ModelManager>,
+    mm: State<ModelManager>,
     cookies: Cookies,
     mut req: Request<B>,
     next: Next<B>,
 ) -> Result<Response> {
     debug!("{:<12} - mw_ctx_resolve", "MIDDLEWARE");
 
-    let auth_token = cookies.get(AUTH_TOKEN).map(|c| c.value().to_string());
-
-    // FIXME: Compute real CtxAuthResult<Ctx>
-    let result_ctx = Ctx::new(100).map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string()));
+    // Again, we don't want _ctx_resolve to fail here (using '?').
+    // Instead, it will be handled later downstream.
+    let ctx_ext_result = _ctx_resolve(mm, &cookies).await;
 
     // Now that we have result_ctx, we don't want to fail on this function if there
     // is an error. Instead, we need to remove the cookie if something
-    // went wrong other than AuthFailNoAuthTokenCookie
-    if result_ctx.is_err() && !matches!(result_ctx, Err(CtxExtError::TokenNotInCookie)) {
+    // went wrong other than AuthFailNoAuthTokenCookie. If the TokenNotInCookie error,
+    // then there's nothing to remove from the cookie anyway.
+    if ctx_ext_result.is_err() && !matches!(ctx_ext_result, Err(CtxExtError::TokenNotInCookie)) {
         cookies.remove(Cookie::named(AUTH_TOKEN))
     }
 
-    // NOTE: Nice trick. We store ctx_result into a Request extension,
+    // NOTE: TIP: Nice trick. We store ctx_ext_result into a Request extension,
     // An extension of Request kinda like a data store you can insert into,
-    // but by specific types! You can accidentally overwrite some previous
+    // but by specific TYPE! You can accidentally overwrite some previous
     // value if not careful, so that's why we insert our result_ctx
     // After this, we can retrieve this result_ctx we just stored in
     // extensions by using parts.extensions.get::<Result<Ctx>>()
-    req.extensions_mut().insert(result_ctx);
+    req.extensions_mut().insert(ctx_ext_result);
 
     Ok(next.run(req).await)
+}
+
+// NOTE: We don't want to panic if errors. Instead, we capture the entire CtxExtResult
+// and then let the other MW handle specific Err cases.
+async fn _ctx_resolve(mm: State<ModelManager>, cookies: &Cookies) -> CtxExtResult {
+    // -- Get Token String
+    let token = cookies
+        .get(AUTH_TOKEN)
+        .map(|c| c.value().to_string())
+        .ok_or(CtxExtError::TokenNotInCookie)?;
+
+    // -- Parse Token
+    // Shadow 'token'variable
+    // NOTE: token.parse() returns a crypt::Error, but we want a CtxExtError type.
+    // We also don't capture the token info for safety reasons.
+    let token: Token = token.parse().map_err(|_| CtxExtError::TokenWrongFormat)?;
+
+    // -- Get UserForAuth from DB
+    // REF: https://youtu.be/3cA_mk4vdWY?t=11021
+    let user: UserForAuth = UserBmc::first_by_username(&Ctx::root_ctx(), &mm, &token.ident)
+        .await
+        .map_err(|ex| CtxExtError::ModelAccessError(ex.to_string()))?
+        .ok_or(CtxExtError::UserNotFound)?;
+
+    // -- Validate Token
+    validate_web_token(&token, &user.token_salt.to_string())
+        .map_err(|_| CtxExtError::FailValidate)?;
+
+    // -- Update Token & Cookies
+    set_token_cookie(cookies, &user.username, &user.token_salt.to_string())
+        .map_err(|_| CtxExtError::CannotSetTokenCookie)?;
+
+    // -- Create CtxExtResult to be added to Request extension
+    // NOTE: Recall that CtxExtResult is independent of the web layer, so that's why
+    // there is no cookie, token, etc.
+    Ctx::new(user.id).map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string()))
 }
 
 // region: -- Ctx Extractor
@@ -83,9 +124,13 @@ pub async fn mw_ctx_resolve<B>(
 // Axum's FromRequestParts<State>, where S requires Send and Sync
 // NOTE: There are two types of Extractors:
 // -- 1. For the body (more strict)
-// -- 2. For everything else (general - and we're doing it here)
+// -- 2. For everything else (general - what we're doing it here)
 // This extractor will take info from headers, URL params etc.,
 // which is want we want since we're taking it from headers
+// NOTE: The mw_ctx_resolve and this Ctx Extractor kinda work
+// hand-in-hand. mw_ctx_resolve creates the Ctx after validating
+// the auth token and then puts it (Ctx) into Request extension,
+// where this Ctx Extractor will retrieve it from.
 #[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for Ctx {
     type Rejection = Error;
@@ -143,12 +188,25 @@ impl<S: Send + Sync> FromRequestParts<S> for Ctx {
 // endregion: -- Ctx Extractor
 
 // region: -- Ctx Extractor Result/Error
+// NOTE: This is so we don't have to make the web::Error implement
+// things like Clone, etc. - this keeps the Result/Error specific
+// to our Ctx Extractor.
+// REF: https://youtu.be/3cA_mk4vdWY?t=10526
 type CtxExtResult = core::result::Result<Ctx, CtxExtError>;
 
 #[derive(Clone, Serialize, Debug)]
 pub enum CtxExtError {
     TokenNotInCookie,
+    TokenWrongFormat,
+
+    UserNotFound,
+    // NOTE: Could consider having the inner model::Error instead of String
+    ModelAccessError(String),
+    FailValidate,
+    CannotSetTokenCookie,
+
     CtxNotInRequestExt,
+    // NOTE: Could consider having the inner ctx::Error instead of String
     CtxCreateFail(String),
 }
 // endregion: -- Ctx Extractor Result/Error

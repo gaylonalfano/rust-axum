@@ -26,6 +26,11 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug, Serialize, strum_macros::AsRefStr)]
 #[serde(tag = "type", content = "data")]
 pub enum Error {
+    // -- RPC
+    RpcMethodUnknown(String),
+    RpcMissingParams { rpc_method: String },
+    RpcFailJsonParams { rpc_method: String },
+
     // -- Login
     LoginFail,
     LoginFailUsernameNotFound,
@@ -42,6 +47,9 @@ pub enum Error {
     // -- Modules
     Crypt(crypt::Error),
     Model(model::Error),
+
+    // -- External Modules
+    SerdeJson(String),
 }
 
 // region:       -- Froms
@@ -56,6 +64,12 @@ impl From<crypt::Error> for Error {
 impl From<model::Error> for Error {
     fn from(value: model::Error) -> Self {
         Self::Model(value)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Self {
+        Self::SerdeJson(value.to_string())
     }
 }
 // endregion:    -- Froms

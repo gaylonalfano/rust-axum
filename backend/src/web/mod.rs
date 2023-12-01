@@ -1,21 +1,15 @@
-// pub mod create_ledger;
-// pub use create_ledger::*;
-
 // Create sub-module:
-pub mod error;
+mod error;
 pub mod mw_auth;
 pub mod mw_res_map;
 pub mod routes_login;
 pub mod routes_static;
+pub mod rpc;
 
-pub use error::*;
-pub use mw_auth::*;
-pub use mw_res_map::*;
-pub use routes_login::*;
-pub use routes_static::*;
-use tower_cookies::{Cookie, Cookies};
-
+pub use self::error::ClientError;
+pub use self::error::{Error, Result};
 use crate::crypt::token::generate_web_token;
+use tower_cookies::{Cookie, Cookies};
 
 pub const AUTH_TOKEN: &str = "auth-token";
 

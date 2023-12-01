@@ -14,6 +14,11 @@ mod web;
 // #[cfg(test)] // Commented during early development
 pub mod _dev_utils;
 
+use crate::web::{
+    mw_auth::{mw_ctx_require, mw_ctx_resolve},
+    mw_res_map::mw_response_map,
+};
+
 // Re-export our new custom Error and Result from error.rs
 // We now have a crate Error and crate Result we can import
 // into other modules.
@@ -44,10 +49,10 @@ use web::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Enable RUST_BACKTRACE
+    // -- Enable RUST_BACKTRACE
     env::set_var("RUST_BACKTRACE", "1");
 
-    // Tracing
+    // -- Tracing
     tracing_subscriber::fmt()
         .without_time() // E.g. 2023-10-28T13:01:17.945497Z
         .with_target(false) // For simple tracing
@@ -59,8 +64,11 @@ async fn main() -> Result<()> {
     // doesn't initialize correctly.
     _dev_utils::init_dev().await;
 
-    // Initialize ModelManager
+    // -- Initialize ModelManager
     let mm = ModelManager::new().await?;
+
+    // -- Define Routes
+    let routes_rpc = rpc::routes(mm.clone()).route_layer(middleware::from_fn(mw_ctx_require));
 
     // NOTE: You could create a separate struct for mw, but the from_fn() is very
     // powerful
@@ -75,7 +83,7 @@ async fn main() -> Result<()> {
         .merge(routes_login::routes(mm.clone()))
         .merge(routes_hello())
         // NOTE: By nesting (merging), we are basically attaching a subrouter
-        // .nest("/api", routes_api)
+        .nest("/api", routes_rpc)
         .layer(middleware::map_response(mw_response_map))
         // NOTE: Making our Ctx extractor accessible to all routes
         .layer(middleware::from_fn_with_state(mm.clone(), mw_ctx_resolve))

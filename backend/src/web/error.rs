@@ -126,6 +126,12 @@ impl Error {
             // -- Auth
             CtxExt(_) => (StatusCode::FORBIDDEN, ClientError::NO_AUTH),
 
+            // -- Model
+            Model(model::Error::EntityNotFound { entity, id }) => (
+                StatusCode::BAD_REQUEST,
+                ClientError::ENTITY_NOT_FOUND { entity, id: *id }, // Deref the &i64
+            ),
+
             // -- Fallback
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -140,11 +146,25 @@ impl Error {
 // NOTE: Client API result errors convention has all CAPS, but it's not convention
 // for enums. To allow this, we need to add some macros. Also using
 // strum_macros to convert variants into strings.
-#[derive(Debug, strum_macros::AsRefStr)]
+// NOTE: U: When a client tries to interact with an entity that does not
+// exist, we have a model::Error Model(EntityNotFound {..}) variant.
+// We see this in our logs. But, if we want the Client to also see
+// this error (in the CLIENT ERROR BODY log line), then we need to
+// add a new variant here (ENTITY_NOT_FOUND) for this web::error
+// module, specifically for this ClientError enum. We also need
+// to add a new server-error-to-client-error mapping variant:
+// (**see client_status_and_error() details)
+// NOTE: U: We use serde::Serialize to Serialize the ClientError
+// as JSON inside our web::mw_response_map().
+// tag=VariantName, content=VariantData
+// REF: https://youtu.be/3cA_mk4vdWY?t=13547
+#[derive(Debug, Serialize, strum_macros::AsRefStr)]
+#[serde(tag = "message", content = "detail")]
 #[allow(non_camel_case_types)]
 pub enum ClientError {
     LOGIN_FAIL,
     NO_AUTH,
+    ENTITY_NOT_FOUND { entity: &'static str, id: i64 },
     SERVICE_ERROR,
 }
 // endregion: -- Client Error

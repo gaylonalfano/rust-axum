@@ -55,6 +55,33 @@ async fn main() -> Result<()> {
     );
     req_create_task.await?.print().await?;
 
+    let req_update_task = http_client.do_post(
+        "/api/rpc",
+        json!({
+        "id": 1,
+        "method": "update_task",
+        "params": {
+        "id": 1000, // Hardcode the task id
+        "data": {
+        "title": "task BB"
+        }
+        }
+        }),
+    );
+    req_update_task.await?.print().await?;
+
+    let req_delete_task = http_client.do_post(
+        "/api/rpc",
+        json!({
+        "id": 1,
+        "method": "delete_task",
+        "params": {
+        "id": 1001 // <<-- Hardcode the task id to fail
+        }
+        }),
+    );
+    req_delete_task.await?.print().await?;
+
     // U: After adding JSON RPC rpc module
     let req_list_tasks =
         http_client.do_post("/api/rpc", json!({ "id": 1, "method": "list_tasks" }));

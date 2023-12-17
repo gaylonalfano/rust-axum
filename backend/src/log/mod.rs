@@ -1,7 +1,9 @@
+// FIXME: This is for our Server-Side Request Log
 // pub mod error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ctx::Ctx;
+use crate::web::rpc::RpcInfo;
 use crate::web::{self, ClientError};
 use crate::Result;
 use axum::http::{Method, Uri};
@@ -17,8 +19,9 @@ use uuid::Uuid;
 // for our main_response_mapper
 pub async fn log_request(
     uuid: Uuid,
-    req_method: Method,
+    http_method: Method,
     uri: Uri,
+    rpc_info: Option<&RpcInfo>,
     ctx: Option<Ctx>,
     service_error: Option<&web::Error>,
     client_error: Option<ClientError>,
@@ -41,8 +44,11 @@ pub async fn log_request(
 
         user_id: ctx.map(|c| c.user_id()),
 
-        req_path: uri.to_string(),
-        req_method: req_method.to_string(),
+        http_path: uri.to_string(),
+        http_method: http_method.to_string(),
+
+        rpc_id: rpc_info.and_then(|rpc| rpc.id.as_ref().map(|id| id.to_string())),
+        rpc_method: rpc_info.map(|rpc| rpc.method.to_string()),
 
         client_error_type: client_error.map(|e| e.as_ref().to_string()),
         error_type: service_error_type,
@@ -68,8 +74,12 @@ struct RequestLogLine {
     user_id: Option<i64>,
 
     // -- http request attributes
-    req_path: String,
-    req_method: String,
+    http_path: String,
+    http_method: String,
+
+    // -- RPC Info
+    rpc_id: Option<String>,
+    rpc_method: Option<String>,
 
     // -- Errors attributes
     client_error_type: Option<String>,

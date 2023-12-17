@@ -1,6 +1,8 @@
 #![allow(unused)] // For beginners
                   // TODO: Pausing at the end of section 4. Going to
                   // experiment with a simple Axum-Htmx
+                  // FIXME: Left off close to the very end. We just completed
+                  // the RPC task_rpc.rs with intro to proc macros.
 
 mod config;
 mod crypt;

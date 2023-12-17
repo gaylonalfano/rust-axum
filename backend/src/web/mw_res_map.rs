@@ -1,10 +1,12 @@
+// FIXME: I believe this is for the Client-Side Logging (see log/mod.rs for Server Side)
 use crate::ctx;
 use crate::log::log_request;
 use crate::web;
+use crate::web::rpc::RpcInfo;
 use axum::http::{Method, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde_json::json;
+use serde_json::{json, to_value};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -17,26 +19,43 @@ use uuid::Uuid;
 pub async fn mw_response_map(
     ctx: Option<ctx::Ctx>,
     uri: Uri,
-    req_method: Method,
+    http_method: Method,
     res: Response,
 ) -> Response {
     debug!("{:<12} - mw_response_map", "RES_MAPPER");
     // Create a uuid to match our server errors to client errors
     let uuid = Uuid::new_v4();
 
-    // - Get the eventual response error
+    // -- Get RpcInfo
+    let rpc_info = res.extensions().get::<RpcInfo>();
+
+    // -- Get the eventual response error
     let service_error = res.extensions().get::<web::Error>();
     let client_status_error = service_error.map(|se| se.client_status_and_error());
 
-    // - If client error, build a new response
-    // Using as_ref() bc we're going to reuse this for server request login
+    // -- If client error, build a new response
+    // Using as_ref() bc we're going to reuse this for server request logging
+    // NOTE: U: After Serializing our ClientError enum (web::error.rs), we're
+    // updating this to be more JSON RPC like.
     let error_response = client_status_error
         .as_ref()
         .map(|(status_code, client_error)| {
+            // U: After adding Serialize to ClientError to be more JSON RPC like.
+            // We'll be extracting the tag="message" and content="detail"
+            let client_error = serde_json::to_value(client_error).ok();
+            let message = client_error.as_ref().and_then(|v| v.get("message"));
+            let detail = client_error.as_ref().and_then(|v| v.get("detail"));
+
+            // U: Now we're making it more JSON RPC compliant with our structure
+            // (id, error.{message,data{}})
             let client_error_body = json!({
+                "id": rpc_info.as_ref().map(|rpc| rpc.id.clone()),
                 "error": {
-                    "type": client_error.as_ref(), // Thanks to strum_macros
-                    "req_uuid": uuid.to_string(),
+                    "message": message, // VariantName
+                    "data": {
+                        "req_uuid": uuid.to_string(),
+                        "detail": detail // VariantData
+                    }
                 }
             });
 
@@ -57,7 +76,16 @@ pub async fn mw_response_map(
     // you can then use tools like CloudWatch and query with cloud-native tools.
     // NOTE: Option.unzip() gives us the Option<ClientError>
     let client_error = client_status_error.unzip().1;
-    log_request(uuid, req_method, uri, ctx, service_error, client_error).await;
+    log_request(
+        uuid,
+        http_method,
+        uri,
+        rpc_info,
+        ctx,
+        service_error,
+        client_error,
+    )
+    .await;
 
     debug!("\n");
     // NOTE:If we remove our quick_dev req_login(), we'll see the error uuids

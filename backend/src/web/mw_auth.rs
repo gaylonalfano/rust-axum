@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use axum::extract::{FromRequestParts, State};
 use axum::http::request::Parts;
 use axum::RequestPartsExt;
-use axum::{http::Request, middleware::Next, response::Response};
+use axum::{body::Body, http::Request, middleware::Next, response::Response};
 use lazy_regex::regex_captures;
 use serde::Serialize;
 use tower_cookies::{Cookie, Cookies};
@@ -14,7 +14,7 @@ use crate::model::user::{UserBmc, UserForAuth};
 use crate::model::ModelManager;
 use crate::web::{set_token_cookie, Error, Result, AUTH_TOKEN};
 
-pub async fn mw_ctx_require<B>(
+pub async fn mw_ctx_require(
     // cookies: Cookies,
     // NOTE: !!: The BIG idea of Ctx is we're going to use it for privileges and access control,
     // at both the web layer and the model layer (access control?). So, Ctx is going to be
@@ -26,8 +26,8 @@ pub async fn mw_ctx_require<B>(
     // NOTE: If you require Ctx in your handlers, then this makes sure that if you
     // don't use Result<Ctx> or Option<Ctx> (i.e., you pass Ctx directly), it will error.
     ctx: Result<Ctx>, // 'ctx: Ctx' - disables this mw_ctx_require()
-    req: Request<B>,
-    next: Next<B>,
+    req: Request<Body>,
+    next: Next,
 ) -> Result<Response> {
     debug!("{:<12} - mw_ctx_require - {ctx:?}", "MIDDLEWARE");
 
@@ -51,11 +51,11 @@ pub async fn mw_ctx_require<B>(
 // 2. Tower Cookies to set the cookies
 // 3. Set the Request Result (CtxExtResult), which is later retreived via
 // Request Extensions from_request_parts.
-pub async fn mw_ctx_resolve<B>(
+pub async fn mw_ctx_resolve(
     mm: State<ModelManager>,
     cookies: Cookies,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request<Body>,
+    next: Next,
 ) -> Result<Response> {
     debug!("{:<12} - mw_ctx_resolve", "MIDDLEWARE");
 
@@ -68,7 +68,7 @@ pub async fn mw_ctx_resolve<B>(
     // went wrong other than AuthFailNoAuthTokenCookie. If the TokenNotInCookie error,
     // then there's nothing to remove from the cookie anyway.
     if ctx_ext_result.is_err() && !matches!(ctx_ext_result, Err(CtxExtError::TokenNotInCookie)) {
-        cookies.remove(Cookie::named(AUTH_TOKEN))
+        cookies.remove(Cookie::from(AUTH_TOKEN))
     }
 
     // NOTE: TIP: Nice trick. We store ctx_ext_result into a Request extension,

@@ -7,6 +7,7 @@ use axum::http::{Method, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::{json, to_value};
+use std::sync::Arc;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -27,10 +28,15 @@ pub async fn mw_response_map(
     let uuid = Uuid::new_v4();
 
     // -- Get RpcInfo
-    let rpc_info = res.extensions().get::<RpcInfo>();
+    // NOTE: !! U: Axum 0.7 requires the data that's inserted needs to impl Clone,
+    // therefore, we wrapped it in Arc instead of impl Clone on RpcInfo.
+    // However, to get/retrieve the RpcInfo, we need to first remove the Arc by
+    // using Option<&Arc<RpcInfo>>.map(Arc::as_ref) to get ->> Option<&RpcInfo>
+    // REF: https://youtu.be/MvWCX5ckuDE?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=229
+    let rpc_info = res.extensions().get::<Arc<RpcInfo>>().map(Arc::as_ref);
 
     // -- Get the eventual response error
-    let service_error = res.extensions().get::<web::Error>();
+    let service_error = res.extensions().get::<Arc<web::Error>>().map(Arc::as_ref);
     let client_status_error = service_error.map(|se| se.client_status_and_error());
 
     // -- If client error, build a new response

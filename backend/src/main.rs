@@ -42,6 +42,7 @@ use model::*;
 use serde::Deserialize;
 use serde_json::json;
 use std::{env, net::SocketAddr};
+use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
 use tower_http::services::ServeDir;
 use tracing::{debug, info};
@@ -93,10 +94,9 @@ async fn main() -> Result<()> {
         .fallback_service(routes_static::serve_dir());
 
     // region:  --- Start Server
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    info!("{:<12} - {addr}\n", "LISTENING");
-    axum::Server::bind(&addr)
-        .serve(routes_all.into_make_service())
+    let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
+    info!("{:<12} - {:?}\n", "LISTENING", listener.local_addr());
+    axum::serve(listener, routes_all.into_make_service())
         .await
         .unwrap();
     // region: -- end Start Server

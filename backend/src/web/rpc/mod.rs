@@ -10,6 +10,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{from_value, json, to_value, Value};
+use std::sync::Arc;
 use tracing::debug;
 
 use crate::{
@@ -117,7 +118,10 @@ async fn rpc_handler(
 
     // -- Execute & Store RpcInfo in response
     let mut response = _rpc_handler(ctx, mm, rpc_req).await.into_response();
-    response.extensions_mut().insert(rpc_info);
+    // NOTE: !! U: With Tower update, we now are inserting an Arc type into
+    // the response extensions, so when we try to retrieve/extract this RpcInfo,
+    // we actually have to extract the Arc type, not RpcInfo.
+    response.extensions_mut().insert(Arc::new(rpc_info));
 
     response
 }

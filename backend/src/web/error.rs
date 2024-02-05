@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 // NOTE: Only our web crate errors moduls will know about Axum's
 // into_response(), etc. This is for better structure instead of
 // one main error. This means that previously when we added
@@ -67,6 +69,10 @@ impl From<model::Error> for Error {
     }
 }
 
+// Q: How to impl Arc<serde_json::Error> ->> Error::SerdeJson(val)??
+// Do I return Self::SerdeJson(v.to_string())?
+// A: Nope... for now, not going to impl here, but instead just
+// do it mw_res_map.rs > res.extensions().get::<Arc<web::Error>>().map(Arc::as_ref);
 impl From<serde_json::Error> for Error {
     fn from(value: serde_json::Error) -> Self {
         Self::SerdeJson(value.to_string())
@@ -87,7 +93,10 @@ impl IntoResponse for Error {
         let mut response = StatusCode::INTERNAL_SERVER_ERROR.into_response();
         // Then insert our server error inside response using
         // the response.extensions_mut() store by type
-        response.extensions_mut().insert(self);
+        // NOTE: !! U: Axum 0.7 needs us to impl Clone on Error, OR we can
+        // wrap Error with Arc type (see RpcInfo)
+        // REF: https://youtu.be/MvWCX5ckuDE?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=283
+        response.extensions_mut().insert(Arc::new(self));
 
         response
     }

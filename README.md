@@ -1,3 +1,17 @@
+## TODOS
+
+Following the progression here [ref](https://github.com/rust10x/rust-web-app?tab=readme-ov-file#rust10x-web-app-youtube-videos)
+
+[x] Update to Axum 0.7
+[] Work through E02 with Sea-Query + SQLX + ModQL
+[] Work through
+
+## LOG
+
+I have slightly modified my project structure compared to the repo. I've split the root folder into having both a frontend/ and backend/ dirs.
+
+2/6: Adding Sea Query + ModQL. [Quick summary of changes.](https://www.youtube.com/watch?v=-dMH9UiwKqg&list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q)
+
 ## Starting the DB
 
 ```sh

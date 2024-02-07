@@ -27,6 +27,9 @@
 //! it'll go inside the Model Manager as a Model Controller,
 //! but we'll see...
 
+//! NOTE: This model module is the only one that touches the Db store
+//! REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=1273
+
 mod base;
 mod error;
 mod model_manager;

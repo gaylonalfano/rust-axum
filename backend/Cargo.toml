@@ -18,12 +18,17 @@ tower-http = { version = "0.5", features = ["fs"] }
 tower-cookies = "0.10"
 # -- Data
 sqlx = { version = "0.7", features = [
-  "runtime-tokio-rustls",
+  "runtime-tokio",
   "postgres",
   "uuid",
   "time",
 ] }
-sqlb = "0.4"
+sea-query = "0.30"
+sea-query-binder = { version = "0.5", features = [
+  "sqlx-postgres",
+  "with-uuid",
+] }
+modql = { version = "0.3", features = ["with-sea-query"] }
 # -- Tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -42,6 +47,7 @@ lazy-regex = "3"
 async-trait = "0.1"
 # -- Errors
 strum_macros = "0.26"
+derive_more = { version = "1.0.0-beta", features = ["from"] }
 uuid = { version = "1", features = ["v4", "fast-rng"] }
 # -- Others
 time = "0.3"
@@ -50,3 +56,4 @@ time = "0.3"
 anyhow = "1"
 httpc-test = "0.1.7"
 serial_test = "3"
+rand = "0.8"

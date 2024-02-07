@@ -1,3 +1,5 @@
+use derive_more::From;
+use serde_with::{serde_as, DisplayFromStr};
 use std::sync::Arc;
 
 // NOTE: Only our web crate errors moduls will know about Axum's
@@ -25,13 +27,18 @@ pub type Result<T> = core::result::Result<T, Error>;
 // U: Adding Serialize so log_request error can serialize into JSON
 // Handy trick when Serializing enum is to specify the tag="type" (Variant name)
 // and content="data" (internal data for each variant e.g., { id: u64 })
-#[derive(Debug, Serialize, strum_macros::AsRefStr)]
+#[serde_as]
+#[derive(Debug, Serialize, strum_macros::AsRefStr, From)]
 #[serde(tag = "type", content = "data")]
 pub enum Error {
     // -- RPC
     RpcMethodUnknown(String),
-    RpcMissingParams { rpc_method: String },
-    RpcFailJsonParams { rpc_method: String },
+    RpcMissingParams {
+        rpc_method: String,
+    },
+    RpcFailJsonParams {
+        rpc_method: String,
+    },
 
     // -- Login
     LoginFail,
@@ -40,45 +47,56 @@ pub enum Error {
     // clear the actual value: LoginFail { user_id: i64 }.
     // Use tuple when simply holding/encapsulating the name of
     // the variant: Model(model::Error)
-    LoginFailUserHasNoPwd { user_id: i64 },
-    LoginFailPwdNotMatching { user_id: i64 },
+    LoginFailUserHasNoPwd {
+        user_id: i64,
+    },
+    LoginFailPwdNotMatching {
+        user_id: i64,
+    },
 
     // -- CtxExtError
+    #[from]
     CtxExt(web::mw_auth::CtxExtError),
 
     // -- Modules
+    #[from]
     Crypt(crypt::Error),
+    #[from]
     Model(model::Error),
 
     // -- External Modules
-    SerdeJson(String),
+    #[from]
+    SerdeJson(#[serde_as(as = "DisplayFromStr")] serde_json::Error),
+    // SerdeJson(String),
 }
 
-// region:       -- Froms
-impl From<crypt::Error> for Error {
-    fn from(value: crypt::Error) -> Self {
-        Self::Crypt(value)
-    }
-}
-
-// NOTE: To allow the compiler to go from a Model Error to a Web Error,
-// we have to impl From trait
-impl From<model::Error> for Error {
-    fn from(value: model::Error) -> Self {
-        Self::Model(value)
-    }
-}
-
-// Q: How to impl Arc<serde_json::Error> ->> Error::SerdeJson(val)??
-// Do I return Self::SerdeJson(v.to_string())?
-// A: Nope... for now, not going to impl here, but instead just
-// do it mw_res_map.rs > res.extensions().get::<Arc<web::Error>>().map(Arc::as_ref);
-impl From<serde_json::Error> for Error {
-    fn from(value: serde_json::Error) -> Self {
-        Self::SerdeJson(value.to_string())
-    }
-}
-// endregion:    -- Froms
+// // region:       -- Froms
+// // NOTE: Added derive_more::From so no longer need manual impl blocks
+// impl From<crypt::Error> for Error {
+//     fn from(value: crypt::Error) -> Self {
+//         Self::Crypt(value)
+//     }
+// }
+//
+// // NOTE: To allow the compiler to go from a Model Error to a Web Error,
+// // we have to impl From trait
+// impl From<model::Error> for Error {
+//     fn from(value: model::Error) -> Self {
+//         Self::Model(value)
+//     }
+// }
+//
+// // Q: How to impl Arc<serde_json::Error> ->> Error::SerdeJson(val)??
+// // Do I return Self::SerdeJson(v.to_string())?
+// // A: Nope... for now, not going to impl here, but instead just
+// // do it mw_res_map.rs > res.extensions().get::<Arc<web::Error>>().map(Arc::as_ref);
+// // U: We later add derive_more::From, so we don't have to manually impl this.
+// impl From<serde_json::Error> for Error {
+//     fn from(value: serde_json::Error) -> Self {
+//         Self::SerdeJson(value.to_string())
+//     }
+// }
+// // endregion:    -- Froms
 
 // region:       -- Axum IntoResponse
 impl IntoResponse for Error {

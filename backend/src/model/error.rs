@@ -1,3 +1,4 @@
+use derive_more::From;
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
 
@@ -13,11 +14,14 @@ pub type Result<T> = core::result::Result<T, Error>;
 // NOTE: sqlx::Error doesn't satisfy the Serialize trait bound,
 // but there's a handy serde_with::DisplayFromStr to help
 #[serde_as]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, From)]
 pub enum Error {
     // NOTE: Adding a general model Error for when a get()
     // from the db doesn't return an entity (db table row item)
-    EntityNotFound { entity: &'static str, id: i64 },
+    EntityNotFound {
+        entity: &'static str,
+        id: i64,
+    },
 
     // -- Modules
     // NOTE: When creating a new Model Manager, we add the Db as a
@@ -26,37 +30,46 @@ pub enum Error {
     // return is the store module's Error, NOT model module's Error.
     // Therefore, we need to expand this model Error to have a specific
     // 'store' module inner variant.
+    // U: Adding derive_more::From but Jeremy has renamed 'crypt' crate
+    // to 'pwd' crate. I'll do that later in ep05 I think when he gets
+    // into password hashing updates.
+    #[from]
     Crypt(crypt::Error),
+    #[from]
     Store(store::Error),
 
     // -- Externals
     // NOTE: sqlx::Error implements DisplayFromStr so this works
+    #[from]
     Sqlx(#[serde_as(as = "DisplayFromStr")] sqlx::Error),
+    #[from]
+    SeaQuery(#[serde_as(as = "DisplayFromStr")] sea_query::error::Error),
 }
 
-// region: -- Froms
-// Help convert these errors into the 'model' module Error
-// NOTE: To allow the compiler to go from a Db Error to a Model Error,
-// we have to impl From trait
-impl From<crypt::Error> for Error {
-    fn from(value: crypt::Error) -> Self {
-        Self::Crypt(value)
-    }
-}
-
-impl From<store::Error> for Error {
-    fn from(value: store::Error) -> Self {
-        Self::Store(value)
-    }
-}
-
-impl From<sqlx::Error> for Error {
-    fn from(value: sqlx::Error) -> Self {
-        Self::Sqlx(value)
-    }
-}
-
-// endregion: -- Froms
+// // region: -- Froms
+// NOTE: U: Added derive_more::From to simplify.
+// // Help convert these errors into the 'model' module Error
+// // NOTE: To allow the compiler to go from a Db Error to a Model Error,
+// // we have to impl From trait
+// impl From<crypt::Error> for Error {
+//     fn from(value: crypt::Error) -> Self {
+//         Self::Crypt(value)
+//     }
+// }
+//
+// impl From<store::Error> for Error {
+//     fn from(value: store::Error) -> Self {
+//         Self::Store(value)
+//     }
+// }
+//
+// impl From<sqlx::Error> for Error {
+//     fn from(value: sqlx::Error) -> Self {
+//         Self::Sqlx(value)
+//     }
+// }
+//
+// // endregion: -- Froms
 
 // region:  -- Error boilerplate (Optional)
 impl std::fmt::Display for Error {

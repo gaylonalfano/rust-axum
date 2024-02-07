@@ -1,7 +1,13 @@
 use crate::model::{Error, Result};
 use crate::{ctx::Ctx, model::model_manager::ModelManager};
+use modql::field::HasFields;
+use modql::filter::{FilterGroup, ListOptions};
+use modql::SIden;
+use sea_query::{
+    ConditionalStatement, Expr, Iden, IntoIden, PostgresQueryBuilder, Query, TableRef,
+};
+use sea_query_binder::SqlxBinder;
 use serde::{Deserialize, Serialize};
-use sqlb::{HasFields, SqlBuilder, Whereable};
 use sqlx::postgres::PgRow;
 use sqlx::FromRow;
 
@@ -15,8 +21,21 @@ use sqlx::FromRow;
 // We're going to use Traits, Generics and Macros to implement
 // this shared impl between all Model Controllers.
 // REF: https://youtu.be/3cA_mk4vdWY?t=4739
+
+// NOTE: This enum is like a Sea Query table and columns
+// REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=561
+#[derive(Iden)]
+pub enum CommonIden {
+    Id,
+}
+
 pub trait DbBmc {
     const TABLE: &'static str;
+
+    // Helper fn to get a sea query table reference
+    fn table_ref() -> TableRef {
+        TableRef::Table(SIden(Self::TABLE).into_iden())
+    }
 }
 
 // NOTE: TIP: sqlb::HasFields allows us to extract the fields on data argument (E)
@@ -29,12 +48,26 @@ where
 {
     let db = mm.db();
 
+    // -- Prep data & Extract fields (name / sea-query value expression)
     let fields = data.not_none_fields();
-    let (id,) = sqlb::insert()
-        .table(MC::TABLE)
-        .data(fields)
-        .returning(&["id"])
-        .fetch_one::<_, (i64,)>(db)
+    // Reformat our fields into a sea-query format for building our query
+    // REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=458
+    let (columns, sea_values) = fields.for_sea_insert();
+
+    // -- Build the query w/ sea-query
+    // NOTE: The builder pattern in sea-query is a "Ref Mut" pattern
+    // Check out my own builder-pattern repo for details!
+    let mut query = Query::insert();
+    query
+        .into_table(MC::table_ref())
+        .columns(columns)
+        .values(sea_values)?
+        .returning(Query::returning().columns([CommonIden::Id]));
+
+    // -- Exec query w/ SQLx
+    let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
+    let (id,) = sqlx::query_as_with::<_, (i64,), _>(&sql, values)
+        .fetch_one(db)
         .await?;
 
     Ok(id)
@@ -57,14 +90,23 @@ where
     E: HasFields,
 {
     let db = mm.db();
-
+    // U: Old. Now we have Sea Query + ModQL
     // let sql = format!("SELECT * FROM {} WHERE id = $1", MC::TABLE);
-    let entity: E = sqlb::select()
-        .table(MC::TABLE)
-        .columns(E::field_names())
-        .and_where("id", "=", id)
+
+    // -- Build the query w/ sea-query
+    // NOTE: The builder pattern in sea-query is a "Ref Mut" pattern
+    // Check out my own builder-pattern repo for details!
+    let mut query = Query::select();
+    query
+        .from(MC::table_ref())
+        .columns(E::field_column_refs())
+        .and_where(Expr::col(CommonIden::Id).eq(id));
+
+    // -- Exec query w/ SQLx
+    let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
+    let entity = sqlx::query_as_with::<_, E, _>(&sql, values)
         .fetch_optional(db)
-        .await? // Fail if db error
+        .await?
         .ok_or(Error::EntityNotFound {
             entity: MC::TABLE,
             id,
@@ -80,14 +122,19 @@ where
     E: HasFields,
 {
     let db = mm.db();
-
     // let sql = format!("SELECT * FROM {} WHERE id = $1", MC::TABLE);
-    let entities: Vec<E> = sqlb::select()
-        .table(MC::TABLE)
-        .columns(E::field_names())
-        .order_by("id") // "!id" for desc order.
+
+    // -- Build the query w/ sea-query
+    // NOTE: The builder pattern in sea-query is a "Ref Mut" pattern
+    // Check out my own builder-pattern repo for details!
+    let mut query = Query::select();
+    query.from(MC::table_ref()).columns(E::field_column_refs());
+
+    // -- Exec query w/ SQLx
+    let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
+    let entities = sqlx::query_as_with::<_, E, _>(&sql, values)
         .fetch_all(db)
-        .await?; // Fail if db error
+        .await?;
 
     Ok(entities)
 }
@@ -102,14 +149,26 @@ where
 {
     let db = mm.db();
 
+    // -- Prep data
     let fields = data.not_none_fields();
-    let count = sqlb::update()
-        .table(MC::TABLE)
-        .and_where("id", "=", id)
-        .data(fields)
-        .exec(db)
-        .await?;
+    // Reformat our fields into a sea-query format for building our query
+    let fields = fields.for_sea_update();
 
+    // -- Build query
+    let mut query = Query::update();
+    query
+        .table(MC::table_ref())
+        .values(fields)
+        .and_where(Expr::col(CommonIden::Id).eq(id));
+
+    // -- Exec query
+    let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
+    let count = sqlx::query_with(&sql, values)
+        .execute(db)
+        .await?
+        .rows_affected();
+
+    // -- Check result
     if count == 0 {
         Err(Error::EntityNotFound {
             entity: MC::TABLE,
@@ -126,12 +185,20 @@ where
 {
     let db = mm.db();
 
-    let count = sqlb::delete()
-        .table(MC::TABLE)
-        .and_where("id", "=", id)
-        .exec(db)
-        .await?;
+    // -- Build query
+    let mut query = Query::delete();
+    query
+        .from_table(MC::table_ref())
+        .and_where(Expr::col(CommonIden::Id).eq(id));
 
+    // -- Exec query
+    let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
+    let count = sqlx::query_with(&sql, values)
+        .execute(db)
+        .await?
+        .rows_affected();
+
+    // -- Check result
     if count == 0 {
         Err(Error::EntityNotFound {
             entity: MC::TABLE,

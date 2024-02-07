@@ -1,4 +1,5 @@
 use crate::model;
+use derive_more::From;
 
 // NOTE: Error handling best practice/normalization
 // REF: https://youtu.be/XZtlD_m59sM
@@ -13,22 +14,25 @@ pub type Result<T> = core::result::Result<T, Error>;
 // U: Adding Serialize so log_request error can serialize into JSON
 // Handy trick when Serializing enum is to specify the tag="type" (Variant name)
 // and content="data" (internal data for each variant e.g., { id: u64 })
-#[derive(Debug)]
+// U: After adding "derive_more::From" dep, we don't have to manually
+#[derive(Debug, From)]
 pub enum Error {
     // -- Config
     ConfigMissingEnv(&'static str),
     ConfigWrongFormat(&'static str),
 
     // -- Modules
+    #[from]
     Model(model::Error),
 }
 
 // region:  -- Froms
-impl From<model::Error> for Error {
-    fn from(val: model::Error) -> Self {
-        Self::Model(val)
-    }
-}
+// U: After adding "derive_more::From" dep, we don't have to manually
+// impl From<model::Error> for Error {
+//     fn from(val: model::Error) -> Self {
+//         Self::Model(val)
+//     }
+// }
 // endregion:  -- Froms
 
 // region:  -- Error boilerplate (Optional)

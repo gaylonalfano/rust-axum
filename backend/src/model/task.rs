@@ -2,6 +2,7 @@ use crate::model::base::{self, DbBmc};
 use crate::model::{Error, Result};
 use crate::{ctx::Ctx, model::model_manager::ModelManager};
 use modql::field::Fields;
+use modql::filter::{ListOptions, OpValsBool, OpValsInt64, OpValsString};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -16,6 +17,7 @@ use sqlx::FromRow;
 pub struct Task {
     pub id: i64,
     pub title: String,
+    pub done: bool,
     // -- sqlb example:
     // #[field(skip)] // sqlb::Fields
     // pub something_else: String,
@@ -27,7 +29,9 @@ pub struct Task {
 
 /// Sent to model layer to update data structure
 // U: Adding Fields to assist with building SQL statements
-#[derive(Fields, Deserialize)]
+// U: Adding Default for new 'done: bool' property, so in
+// our update() test, we can use ..Default::default()
+#[derive(Fields, Default, Deserialize)]
 pub struct TaskForCreate {
     // Don't want users via API to change the 'id' prop
     pub title: String,
@@ -37,6 +41,21 @@ pub struct TaskForCreate {
 #[derive(Fields, Deserialize)]
 pub struct TaskForUpdate {
     pub title: Option<String>,
+    pub done: Option<bool>,
+}
+
+/// Filter by custom fields
+// NOTE: modql traits in detail:
+// - FilterNodes: ModQL trait to turn type into list of nodes for Sea Query
+// - Deserialize: Allows type to have the '$' notation e.g., MongoDB
+#[derive(FilterNodes, Deserialize, Default, Debug)]
+pub struct TaskFilter {
+    // NOTE: TIP! Jeremy prefers to place the keys up top
+    // with other props below with a line between.
+    id: Option<OpValsInt64>,
+
+    title: Option<OpValsString>,
+    done: Option<OpValsBool>,
 }
 // endregion: -- Task Types
 
@@ -77,8 +96,15 @@ impl TaskBmc {
         base::get::<Self, _>(ctx, mm, id).await
     }
 
-    pub async fn list(ctx: &Ctx, mm: &ModelManager) -> Result<Vec<Task>> {
-        base::list::<Self, _>(ctx, mm).await
+    // NOTE: ModQL ListOptions - Offset, OrderBy, Limit
+    pub async fn list(
+        ctx: &Ctx,
+        mm: &ModelManager,
+        filter: Option<TaskFilter>,
+        list_options: Option<ListOptions>,
+    ) -> Result<Vec<Task>> {
+        // NOTE: TIP! Use a generic '_' to let compiler determine type (easier to change)
+        base::list::<Self, _, _>(ctx, mm, filter, list_options).await
 
         // -- BEFORE base layer:
         // let db = mm.db();
@@ -220,7 +246,7 @@ mod tests {
         _dev_utils::seed_tasks(&ctx, &mm, fx_titles).await?;
 
         // -- Exec
-        let tasks = TaskBmc::list(&ctx, &mm).await?;
+        let tasks = TaskBmc::list(&ctx, &mm, None, None).await?;
 
         // -- Check
         // NOTE: To ensure we're checking against the correct tasks,
@@ -258,6 +284,8 @@ mod tests {
             fx_task.id,
             TaskForUpdate {
                 title: Some(fx_title_new.to_string()),
+                // U: Added 'Default' trait to TaskForUpdate, so 'done: bool'
+                ..Default::default()
             },
         )
         .await?;

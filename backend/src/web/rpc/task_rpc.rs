@@ -28,7 +28,7 @@ pub async fn create_task(
 
 pub async fn list_tasks(ctx: Ctx, mm: ModelManager) -> Result<Vec<Task>> {
     // TODO: We'll eventually add in the ability to filter tasks
-    let tasks = TaskBmc::list(&ctx, &mm).await?;
+    let tasks = TaskBmc::list(&ctx, &mm, None, None).await?;
 
     Ok(tasks)
 }

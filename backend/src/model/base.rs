@@ -1,10 +1,10 @@
 use crate::model::{Error, Result};
 use crate::{ctx::Ctx, model::model_manager::ModelManager};
 use modql::field::HasFields;
-use modql::filter::{FilterGroup, ListOptions};
+use modql::filter::{FilterGroup, FilterGroups, ListOptions};
 use modql::SIden;
 use sea_query::{
-    ConditionalStatement, Expr, Iden, IntoIden, PostgresQueryBuilder, Query, TableRef,
+    Condition, ConditionalStatement, Expr, Iden, IntoIden, PostgresQueryBuilder, Query, TableRef,
 };
 use sea_query_binder::SqlxBinder;
 use serde::{Deserialize, Serialize};
@@ -115,11 +115,22 @@ where
     Ok(entity)
 }
 
-pub async fn list<MC, E>(_ctx: &Ctx, mm: &ModelManager) -> Result<Vec<E>>
+// NOTE: U: Adding filtering ability w/ modql::filter::FilterGroups and Sea Query
+// FilterNodes are set up in groups, and groups can be composed together.
+// This makes the monomorphization of first(?) allows us to pass any types as
+// filters that implements the FilterNodes, which impls Into<FilterGroups>.
+// REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=1611
+pub async fn list<MC, E, F>(
+    _ctx: &Ctx,
+    mm: &ModelManager,
+    filter: Option<F>,
+    list_options: Option<ListOptions>,
+) -> Result<Vec<E>>
 where
     MC: DbBmc,
     E: for<'r> FromRow<'r, PgRow> + Unpin + Send,
     E: HasFields,
+    F: Into<FilterGroups>,
 {
     let db = mm.db();
     // let sql = format!("SELECT * FROM {} WHERE id = $1", MC::TABLE);
@@ -129,6 +140,14 @@ where
     // Check out my own builder-pattern repo for details!
     let mut query = Query::select();
     query.from(MC::table_ref()).columns(E::field_column_refs());
+
+    // Add condtion from filter
+    if let Some(filter) = filter {
+        let filters: FilterGroups = filter.into();
+        let cond: Condition = filters.try_into()?;
+    }
+
+    // List options
 
     // -- Exec query w/ SQLx
     let (sql, values) = query.build_sqlx(PostgresQueryBuilder);

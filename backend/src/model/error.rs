@@ -44,6 +44,10 @@ pub enum Error {
     Sqlx(#[serde_as(as = "DisplayFromStr")] sqlx::Error),
     #[from]
     SeaQuery(#[serde_as(as = "DisplayFromStr")] sea_query::error::Error),
+    // NOTE: serde_as(as = "DisplayFromStr") ensures everything can get deserialized into JSON
+    // for our RequestLogLine
+    #[from]
+    ModqlIntoSeaQuery(#[serde_as(as = "DisplayFromStr")] modql::filter::IntoSeaError),
 }
 
 // // region: -- Froms

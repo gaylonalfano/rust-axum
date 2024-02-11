@@ -123,7 +123,7 @@ where
 pub async fn list<MC, E, F>(
     _ctx: &Ctx,
     mm: &ModelManager,
-    filter: Option<F>,
+    filters: Option<F>,
     list_options: Option<ListOptions>,
 ) -> Result<Vec<E>>
 where
@@ -142,12 +142,21 @@ where
     query.from(MC::table_ref()).columns(E::field_column_refs());
 
     // Add condtion from filter
-    if let Some(filter) = filter {
-        let filters: FilterGroups = filter.into();
+    if let Some(filters) = filters {
+        let filters: FilterGroups = filters.into();
+        // NOTE: Had to add a new ModqlIntoSeaQuery Error enum variant for filtering (see
+        // model/error.rs) for details
         let cond: Condition = filters.try_into()?;
+        query.cond_where(cond);
     }
 
     // List options
+    // NOTE:U: TIP! - The problem of doing an 'if let Some(list_options) is that our
+    // call to list_options.apply_to_sea_query() will only run IF we 
+    // pass in actual list options. This leaves our SELECT statement unbounded!
+    // Better is to ALWAYS call this apply_to_sea_query() with some sort of default.
+    let list_options = finalize_list_options(list_options)?;
+    list_options.apply_to_sea_query(&mut query);
 
     // -- Exec query w/ SQLx
     let (sql, values) = query.build_sqlx(PostgresQueryBuilder);

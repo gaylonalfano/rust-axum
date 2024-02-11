@@ -2,7 +2,7 @@ use crate::model::base::{self, DbBmc};
 use crate::model::{Error, Result};
 use crate::{ctx::Ctx, model::model_manager::ModelManager};
 use modql::field::Fields;
-use modql::filter::{ListOptions, OpValsBool, OpValsInt64, OpValsString};
+use modql::filter::{FilterNodes, ListOptions, OpValsBool, OpValsInt64, OpValsString};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -38,7 +38,7 @@ pub struct TaskForCreate {
 }
 
 /// Sent to model layer to update data structure
-#[derive(Fields, Deserialize)]
+#[derive(Fields, Default, Deserialize)]
 pub struct TaskForUpdate {
     pub title: Option<String>,
     pub done: Option<bool>,
@@ -100,11 +100,11 @@ impl TaskBmc {
     pub async fn list(
         ctx: &Ctx,
         mm: &ModelManager,
-        filter: Option<TaskFilter>,
+        filters: Option<Vec<TaskFilter>>,
         list_options: Option<ListOptions>,
     ) -> Result<Vec<Task>> {
         // NOTE: TIP! Use a generic '_' to let compiler determine type (easier to change)
-        base::list::<Self, _, _>(ctx, mm, filter, list_options).await
+        base::list::<Self, _, _>(ctx, mm, filters, list_options).await
 
         // -- BEFORE base layer:
         // let db = mm.db();
@@ -155,6 +155,7 @@ mod tests {
 
     use super::*;
     use anyhow::Result;
+    use serde_json::json;
     use serial_test::serial;
 
     // NOTE: Convention with some variations
@@ -238,11 +239,11 @@ mod tests {
 
     #[serial]
     #[tokio::test]
-    async fn test_list_ok() -> Result<()> {
+    async fn test_list_all_ok() -> Result<()> {
         // -- Setup & Fixtures
         let mm = _dev_utils::init_test().await;
         let ctx = Ctx::root_ctx();
-        let fx_titles = &["test_list_ok-task 01", "test_list_ok-task 02"];
+        let fx_titles = &["test_list_all_ok-task 01", "test_list_all_ok-task 02"];
         _dev_utils::seed_tasks(&ctx, &mm, fx_titles).await?;
 
         // -- Exec
@@ -253,11 +254,78 @@ mod tests {
         // we're going to make sure the task titles match
         let tasks: Vec<Task> = tasks
             .into_iter()
-            .filter(|t| t.title.starts_with("test_list_ok-task"))
+            .filter(|t| t.title.starts_with("test_list_all_ok-task"))
             .collect();
         assert_eq!(tasks.len(), 2, "Number of seeded tasks");
 
         // -- Clean
+        for task in tasks.iter() {
+            TaskBmc::delete(&ctx, &mm, task.id).await?;
+        }
+
+        Ok(())
+    }
+
+    #[serial]
+    #[tokio::test]
+    async fn test_list_by_filter_ok() -> Result<()> {
+        // -- Setup & Fixtures
+        let mm = _dev_utils::init_test().await;
+        let ctx = Ctx::root_ctx();
+        let fx_titles = &[
+            "test_list_by_filter_ok-task 01.a",
+            "test_list_by_filter_ok-task 01.b",
+            "test_list_by_filter_ok-task 02.a",
+            "test_list_by_filter_ok-task 02.b",
+            "test_list_by_filter_ok-task 03",
+        ];
+        _dev_utils::seed_tasks(&ctx, &mm, fx_titles).await?;
+
+        // -- Exec
+        // NOTE: Lots of Modql filter operations
+        // REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=1975
+        let filters: Vec<TaskFilter> = serde_json::from_value(json!([
+            {
+                // "title": "test_list_by_filter_ok-task 01.a"
+                "title": {
+                    "$endsWith": ".a",
+                    // "$contains": "01",
+                    "$containsAny": ["01", "02"],
+                }
+            },
+            {
+            "title": {"$contains": "03"}
+            }
+        ]))?;
+        let list_options: ListOptions = serde_json::from_value(json!({
+            // "limit": 1,
+            "order_bys": "!id",
+        }))?;
+
+        let tasks = TaskBmc::list(&ctx, &mm, Some(filters), Some(list_options)).await?;
+
+        // -- Check
+        // NOTE: TIP! When first writing tests, we can remove the check
+        // and just use a simple debug print. Later add check.
+        // NOTE: To ensure we're checking against the correct tasks,
+        // we're going to make sure the task titles match
+        assert_eq!(tasks.len(), 3);
+        assert!(tasks[0].title.ends_with("03"));
+        assert!(tasks[1].title.ends_with("02.a"));
+        assert!(tasks[2].title.ends_with("01.a"));
+
+        // -- Clean
+        let tasks = TaskBmc::list(
+            &ctx,
+            &mm,
+            Some(serde_json::from_value(json!([{
+            "title": {"$startsWith": "test_list_by_filter_ok"}
+            }]))?),
+            None,
+        )
+        .await?;
+        assert_eq!(tasks.len(), 5);
+
         for task in tasks.iter() {
             TaskBmc::delete(&ctx, &mm, task.id).await?;
         }

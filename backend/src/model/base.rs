@@ -22,6 +22,9 @@ use sqlx::FromRow;
 // this shared impl between all Model Controllers.
 // REF: https://youtu.be/3cA_mk4vdWY?t=4739
 
+const LIST_LIMIT_DEFAULT: i64 = 300;
+const LIST_LIMIT_MAX: i64 = 1000;
+
 // NOTE: This enum is like a Sea Query table and columns
 // REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=561
 #[derive(Iden)]
@@ -35,6 +38,34 @@ pub trait DbBmc {
     // Helper fn to get a sea query table reference
     fn table_ref() -> TableRef {
         TableRef::Table(SIden(Self::TABLE).into_iden())
+    }
+}
+
+pub fn finalize_list_options(list_options: Option<ListOptions>) -> Result<ListOptions> {
+    // -- When Some, validate limit
+    if let Some(mut list_options) = list_options {
+        // Validate the limit
+        if let Some(limit) = list_options.limit {
+            if limit > LIST_LIMIT_MAX {
+                return Err(Error::ListLimitOverMax {
+                    max: LIST_LIMIT_MAX,
+                    actual: limit,
+                });
+            }
+        }
+        // Set to default is no limit provided
+        else {
+            list_options.limit = Some(LIST_LIMIT_DEFAULT);
+        }
+        Ok(list_options)
+    }
+    // -- When None, return default limit
+    else {
+        Ok(ListOptions {
+            limit: Some(LIST_LIMIT_DEFAULT),
+            offset: None,
+            order_bys: Some("id".into()),
+        })
     }
 }
 
@@ -152,7 +183,7 @@ where
 
     // List options
     // NOTE:U: TIP! - The problem of doing an 'if let Some(list_options) is that our
-    // call to list_options.apply_to_sea_query() will only run IF we 
+    // call to list_options.apply_to_sea_query() will only run IF we
     // pass in actual list options. This leaves our SELECT statement unbounded!
     // Better is to ALWAYS call this apply_to_sea_query() with some sort of default.
     let list_options = finalize_list_options(list_options)?;

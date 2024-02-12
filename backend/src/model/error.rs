@@ -23,6 +23,11 @@ pub enum Error {
         id: i64,
     },
 
+    ListLimitOverMax {
+        max: i64,
+        actual: i64,
+    },
+
     // -- Modules
     // NOTE: When creating a new Model Manager, we add the Db as a
     // inner Model Controller property. However, when creating a new Db

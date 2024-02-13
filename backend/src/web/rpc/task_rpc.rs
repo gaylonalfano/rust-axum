@@ -1,9 +1,8 @@
 use crate::ctx::Ctx;
-use crate::model::task::{Task, TaskBmc, TaskForCreate, TaskForUpdate};
+use crate::model::task::{Task, TaskBmc, TaskFilter, TaskForCreate, TaskForUpdate};
 use crate::model::ModelManager;
+use crate::web::rpc::params::{ParamsForCreate, ParamsForUpdate, ParamsIdOnly, ParamsList};
 use crate::web::Result;
-
-use super::{ParamsForCreate, ParamsForUpdate, ParamsIdOnly};
 
 // NOTE: !! - Our design is as follows: Our ModelController (TaskBmc)
 // will be very granular and will only return the id (TaskBmc::create -> Result<i64>).
@@ -26,9 +25,12 @@ pub async fn create_task(
     Ok(task)
 }
 
-pub async fn list_tasks(ctx: Ctx, mm: ModelManager) -> Result<Vec<Task>> {
-    // TODO: We'll eventually add in the ability to filter tasks
-    let tasks = TaskBmc::list(&ctx, &mm, None, None).await?;
+pub async fn list_tasks(
+    ctx: Ctx,
+    mm: ModelManager,
+    params: ParamsList<TaskFilter>,
+) -> Result<Vec<Task>> {
+    let tasks = TaskBmc::list(&ctx, &mm, params.filters, params.list_options).await?;
 
     Ok(tasks)
 }

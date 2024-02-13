@@ -319,7 +319,7 @@ mod tests {
             &ctx,
             &mm,
             Some(serde_json::from_value(json!([{
-            "title": {"$startsWith": "test_list_by_filter_ok"}
+                "title": {"$startsWith": "test_list_by_filter_ok"}
             }]))?),
             None,
         )

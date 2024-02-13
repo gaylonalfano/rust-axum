@@ -6,6 +6,10 @@
                   // BACKEND: cargo watch -q -c -w src/ -x run
                   // FRONTEND: cargo watch -q -c -w examples/ -x "run --example quick_dev"
                   // NOTE: -q quiet, -c clear, -w watch, -x execute
+                  // NOTE: !! Saving a source file versus this quick_dev.rs file will
+                  // have different logging events. I could add a loop to delete all
+                  // the created tasks here, so you don't keep getting multiple tasks
+                  // created.
 
 use anyhow::Result;
 use serde_json::json;
@@ -41,27 +45,35 @@ async fn main() -> Result<()> {
     // NOTE: Comment out this to test out some error logging
     req_login.await?.print().await?;
 
-    let req_create_task = http_client.do_post(
-        "/api/rpc",
-        json!({
-        "id": 1,
-        "method": "create_task",
-        "params": {
-        "data": {
-        "title": "task AAA"
-        }
-        }
-        }),
-    );
-    req_create_task.await?.print().await?;
+    // -- Create multiple Tasks
+    let mut task_ids: Vec<i64> = Vec::new();
+    for i in 0..=4 {
+        let req_create_task = http_client.do_post(
+            "/api/rpc",
+            json!({
+                "id": i,
+                "method": "create_task",
+                "params": {
+                    "data": {
+                        "title": format!("task AAA {i}")
+                    }
+                }
+            }),
+        );
+        // NOTE: HTTPC now supports the JSON value w/ JSON pointer spec,
+        // which returns the i64
+        let result = req_create_task.await?;
+        task_ids.push(result.json_value::<i64>("/result/id")?);
+    }
 
+    // -- Update first Task
     let req_update_task = http_client.do_post(
         "/api/rpc",
         json!({
         "id": 1,
         "method": "update_task",
         "params": {
-        "id": 1000, // Hardcode the task id
+        "id": task_ids[0],
         "data": {
         "title": "task BB"
         }
@@ -70,21 +82,36 @@ async fn main() -> Result<()> {
     );
     req_update_task.await?.print().await?;
 
+    // -- Delete second Task
     let req_delete_task = http_client.do_post(
         "/api/rpc",
         json!({
         "id": 1,
         "method": "delete_task",
         "params": {
-        "id": 1001 // <<-- Hardcode the task id to fail
+        "id": task_ids[1], // Second Task
         }
         }),
     );
     req_delete_task.await?.print().await?;
 
+    // -- List Tasks with filters
     // U: After adding JSON RPC rpc module
-    let req_list_tasks =
-        http_client.do_post("/api/rpc", json!({ "id": 1, "method": "list_tasks" }));
+    let req_list_tasks = http_client.do_post(
+        "/api/rpc",
+        json!({ "id": 1, "method": "list_tasks", "params": {
+            "filters": [
+                {
+                    "title": {"$endsWith": "BB"}
+                },
+                {
+                    "id": {"$in": [task_ids[2], task_ids[3]]}
+                }
+            ],
+            "list_options": {
+                "order_bys": "!id"
+        }} }),
+    );
     req_list_tasks.await?.print().await?;
 
     // NOTE: Move this before or after /api/login to see how

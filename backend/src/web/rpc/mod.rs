@@ -1,7 +1,17 @@
 // region:       -- Modules
 
+mod params;
 mod task_rpc;
 
+use crate::{
+    ctx::Ctx,
+    model::ModelManager,
+    web::{
+        rpc::params::*,
+        rpc::task_rpc::{create_task, delete_task, list_tasks, update_task},
+        Error, Result,
+    },
+};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -13,14 +23,6 @@ use serde_json::{from_value, json, to_value, Value};
 use std::sync::Arc;
 use tracing::debug;
 
-use crate::{
-    ctx::Ctx,
-    model::ModelManager,
-    web::{
-        rpc::task_rpc::{create_task, delete_task, list_tasks, update_task},
-        Error, Result,
-    },
-};
 // endregion:    -- Modules
 
 // region:       -- RPC Types
@@ -33,22 +35,6 @@ struct RpcRequest {
     id: Option<Value>,
     method: String,
     params: Option<Value>,
-}
-
-#[derive(Deserialize)]
-pub struct ParamsForCreate<D> {
-    data: D,
-}
-
-#[derive(Deserialize)]
-pub struct ParamsForUpdate<D> {
-    id: i64,
-    data: D,
-}
-
-#[derive(Deserialize)]
-pub struct ParamsIdOnly {
-    id: i64,
 }
 
 /// RPC basic information holding the id and method for further logging
@@ -147,7 +133,7 @@ async fn _rpc_handler(ctx: Ctx, mm: ModelManager, rpc_req: RpcRequest) -> Result
             // but we want a web::Error instead, so we need to add a new
             // web::Error variant (SerdeJson(String)) and allow the conversion
             // by impl From<serde_json::Error> for Error {}
-            exec_rpc_fn!(list_tasks, ctx, mm)
+            exec_rpc_fn!(list_tasks, ctx, mm, rpc_params)
         }
         "update_task" => exec_rpc_fn!(update_task, ctx, mm, rpc_params),
         "delete_task" => exec_rpc_fn!(delete_task, ctx, mm, rpc_params),

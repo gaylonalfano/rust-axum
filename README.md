@@ -3,8 +3,8 @@
 Following the progression here [ref](https://github.com/rust10x/rust-web-app?tab=readme-ov-file#rust10x-web-app-youtube-videos)
 
 [x] Update to Axum 0.7
-[] Work through E02 with Sea-Query + SQLX + ModQL
-[] Work through
+[x] Work through E02 with Sea-Query + SQLX + ModQL
+[] Update to multi-crate workspace
 
 ## LOG
 
@@ -62,4 +62,10 @@ cargo watch -qcx "test model::task::tests -- --nocapture"
 # Specific test with filter
 cargo watch -qcx "test model::task::tests::test_create_ok"
 
+```
+
+## Gen Key
+
+```sh
+cargo run -p gen-key
 ```

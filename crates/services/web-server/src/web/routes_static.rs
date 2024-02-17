@@ -5,7 +5,7 @@ use axum::{
 };
 use tower_http::services::ServeDir;
 
-use crate::config;
+use crate::web_config;
 
 // NOTE: Here we can just return a MethodRouter rather than a full Router
 // since ServeDir is a service.
@@ -14,7 +14,9 @@ pub fn serve_dir() -> MethodRouter {
         (StatusCode::NOT_FOUND, "Resource not found")
     }
 
-    any_service(ServeDir::new(&config().WEB_FOLDER).not_found_service(handle_404.into_service()))
+    any_service(
+        ServeDir::new(&web_config().WEB_FOLDER).not_found_service(handle_404.into_service()),
+    )
 }
 
 // -- OLD

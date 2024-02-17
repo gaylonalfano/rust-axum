@@ -4,6 +4,7 @@ mod error;
 pub use self::error::{Error, Result};
 
 use crate::config::auth_config;
+use hmac::{Hmac, Mac};
 use lib_utils::b64::{b64u_decode_to_string, b64u_encode};
 use lib_utils::time::{now_utc, now_utc_plus_sec_str, parse_utc};
 use sha2::Sha512;
@@ -67,12 +68,12 @@ impl Display for Token {
 // region:       -- Web Token Gen & Validation
 // NOTE: Here we know which keys to take
 
-pub fn generate_web_token(user: &str, salt: &str) -> Result<Token> {
+pub fn generate_web_token(user: &str, salt: Uuid) -> Result<Token> {
     let config = &auth_config();
     _generate_token(user, config.TOKEN_DURATION_SEC, salt, &config.TOKEN_KEY)
 }
 
-pub fn validate_web_token(origin_token: &Token, salt: &str) -> Result<()> {
+pub fn validate_web_token(origin_token: &Token, salt: Uuid) -> Result<()> {
     let config = &auth_config();
     _validate_token_sign_and_exp(origin_token, salt, &config.TOKEN_KEY)?;
 
@@ -86,7 +87,7 @@ pub fn validate_web_token(origin_token: &Token, salt: &str) -> Result<()> {
 
 // NOTE: TIP: When private and public fn names match, best practice
 // is to use `_fn_name` for the private version.
-fn _generate_token(ident: &str, duration_sec: f64, salt: &str, key: &[u8]) -> Result<Token> {
+fn _generate_token(ident: &str, duration_sec: f64, salt: Uuid, key: &[u8]) -> Result<Token> {
     // -- Compute the first two components
     let ident = ident.to_string();
     let exp = now_utc_plus_sec_str(duration_sec);
@@ -102,50 +103,58 @@ fn _generate_token(ident: &str, duration_sec: f64, salt: &str, key: &[u8]) -> Re
 }
 
 // Return Err if validate fail
-fn _validate_token_sign_and_exp(origin_token: &Token, salt: &str, key: &[u8]) -> Result<()> {
+fn _validate_token_sign_and_exp(origin_token: &Token, salt: Uuid, key: &[u8]) -> Result<()> {
     // -- Validate signature
     let new_sign_b64u = _token_sign_into_b64u(&origin_token.ident, &origin_token.exp, salt, key)?;
 
     if new_sign_b64u != origin_token.sign_b64u {
-        return Err(Error::TokenSignatureNotMatching);
+        return Err(Error::SignatureNotMatching);
     }
 
     // -- Validate expiration
     // Need to map to a Token Error
-    let origin_exp = parse_utc(&origin_token.exp).map_err(|_| Error::TokenExpNotIso)?;
+    let origin_exp = parse_utc(&origin_token.exp).map_err(|_| Error::ExpNotIso)?;
     let now = now_utc();
 
     // Ensure that it's not expired
     if origin_exp < now {
-        return Err(Error::TokenExpired);
+        return Err(Error::Expired);
     }
 
     Ok(())
 }
 
 /// Create token signature from token parts and salt
-fn _token_sign_into_b64u(ident: &str, exp: &str, salt: &str, key: &[u8]) -> Result<String> {
+fn _token_sign_into_b64u(ident: &str, exp: &str, salt: Uuid, key: &[u8]) -> Result<String> {
     // -- Create the content to be signed
     let content = format!("{}.{}", b64u_encode(ident), b64u_encode(exp));
-    let signature = encrypt_into_base64url(
-        key,
-        &EncryptContent {
-            content,
-            salt: salt.to_string(),
-        },
-    )?;
 
-    Ok(signature)
+    // -- Create a HMAC-SHA-512 from key
+    let mut hmac_sha512 =
+        Hmac::<Sha512>::new_from_slice(key).map_err(|_| Error::HmacFailNewFromSlice)?;
+
+    // -- Add content
+    hmac_sha512.update(content.as_bytes());
+    hmac_sha512.update(salt.as_bytes());
+
+    // -- Finalize and b64u encode
+    let hmac_result = hmac_sha512.finalize();
+    let result_bytes = hmac_result.into_bytes();
+    let result = b64u_encode(result_bytes);
+
+    Ok(result)
 }
 // endregion:    -- (private) Token Gen & Validation
 
 // region:       -- Tests
 #[cfg(test)]
 mod tests {
-    use std::{fmt::format, thread, time::Duration};
+    pub type Result<T> = core::result::Result<T, Error>;
+    pub type Error = Box<dyn std::error::Error>; // For early dev & tests.
 
     use super::*;
-    use anyhow::Result;
+    use crate::token;
+    use std::{fmt::format, thread, time::Duration};
 
     // NOTE: TIP: For testing `impl Display for Token`, go ahead
     // and create a test at the same time and print what
@@ -198,7 +207,7 @@ mod tests {
     fn test_validate_web_token_ok() -> Result<()> {
         // -- Setup & Fixtures
         let fx_user = "user_one";
-        let fx_salt = "pepper";
+        let fx_salt = Uuid::parse_str("f05e8961-d6ad-4086-9e78-a6de065e5453").unwrap();
         let fx_duration_sec = 0.02; // 20ms
                                     // NOTE: Could consider creating a full Token in config instead
         let token_key = &auth_config().TOKEN_KEY;
@@ -218,7 +227,7 @@ mod tests {
     fn test_validate_web_token_err_expired() -> Result<()> {
         // -- Setup & Fixtures
         let fx_user = "user_one";
-        let fx_salt = "pepper";
+        let fx_salt = Uuid::parse_str("f05e8961-d6ad-4086-9e78-a6de065e5453").unwrap();
         let fx_duration_sec = 0.01; // 10ms
 
         let token_key = &auth_config().TOKEN_KEY;
@@ -233,7 +242,7 @@ mod tests {
         // Q: How to assert we get the intended Error from our Result?
         // A: Use assert!(matches!(...)) macros!
         assert!(
-            matches!(res, Err(Error::TokenExpired)),
+            matches!(res, Err(token::Error::Expired)),
             "Should have matched `Err(Error::TokenExpired)` but was `{res:?}`"
         );
 

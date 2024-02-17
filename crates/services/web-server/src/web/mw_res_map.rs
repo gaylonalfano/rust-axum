@@ -1,12 +1,13 @@
-// FIXME: I believe this is for the Client-Side Logging (see log/mod.rs for Server Side)
-use crate::ctx;
+// NOTE: !! I believe this is for the Client-Side Logging (see log/mod.rs for Server Side)
+
 use crate::log::log_request;
 use crate::web;
-use crate::web::rpc::RpcInfo;
+use crate::web::mw_auth::CtxW;
+use crate::web::routes_rpc::RpcInfo;
 use axum::http::{Method, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde_json::{json, to_value};
+use serde_json::json;
 use std::sync::Arc;
 use tracing::debug;
 use uuid::Uuid;
@@ -18,11 +19,16 @@ use uuid::Uuid;
 // U: Adding our log_request() helper for logging requests per line
 // Thanks to Axum's Extractors, we can get all the needed info.
 pub async fn mw_response_map(
-    ctx: Option<ctx::Ctx>,
+    ctx: Option<CtxW>,
     uri: Uri,
     http_method: Method,
     res: Response,
 ) -> Response {
+    // NOTE: !! U: Multi-crate workspace needed a Ctx wrapper (CtxW)
+    // to keep lib-core and web-server decoupled. Still need Ctx here,
+    // so we grab it from the CtxW wrapper.
+    let ctx = ctx.map(|ctx| ctx.0);
+
     debug!("{:<12} - mw_response_map", "RES_MAPPER");
     // Create a uuid to match our server errors to client errors
     let uuid = Uuid::new_v4();
@@ -82,7 +88,8 @@ pub async fn mw_response_map(
     // you can then use tools like CloudWatch and query with cloud-native tools.
     // NOTE: Option.unzip() gives us the Option<ClientError>
     let client_error = client_status_error.unzip().1;
-    log_request(
+    // TODO: Need to handle if log_request fails (but it should NOT fail entire request!)
+    let _ = log_request(
         uuid,
         http_method,
         uri,

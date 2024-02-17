@@ -11,6 +11,7 @@ use lib_core::ctx::Ctx;
 use lib_core::model::ModelManager;
 use lib_rpc::{exec_rpc, RpcRequest};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tracing::debug;
 
 // region:    -- RPC Router & Handler
@@ -58,38 +59,17 @@ async fn rpc_handler(
 
 /// Route based on RPC method and return a JSON result
 async fn _rpc_handler(ctx: Ctx, mm: ModelManager, rpc_req: RpcRequest) -> Result<Json<Value>> {
-    // Destructure and rename inner props
-    let RpcRequest {
-        id: rpc_id,
-        method: rpc_method,
-        params: rpc_params,
-    } = rpc_req;
+    let rpc_method = rpc_req.method.clone();
+    let rpc_id = rpc_req.id.clone();
 
     debug!("{:<12} - _rpc_handler - method: {rpc_method}", "HANDLER");
 
-    let result_json: Value = match rpc_method.as_str() {
-        // -- Task RPC methods
-        "create_task" => exec_rpc_fn!(create_task, ctx, mm, rpc_params),
-        "list_tasks" => {
-            // NOTE: TIP: When first building a function, can add variables to debug,
-            // and then remove afterwards: let r = list_tasks() + todo!()
-            // NOTE: Using serde_json::to_value() returns a serde_json::Error,
-            // but we want a web::Error instead, so we need to add a new
-            // web::Error variant (SerdeJson(String)) and allow the conversion
-            // by impl From<serde_json::Error> for Error {}
-            exec_rpc_fn!(list_tasks, ctx, mm, rpc_params)
-        }
-        "update_task" => exec_rpc_fn!(update_task, ctx, mm, rpc_params),
-        "delete_task" => exec_rpc_fn!(delete_task, ctx, mm, rpc_params),
-
-        // -- Fallback as Err.
-        _ => return Err(Error::RpcMethodUnknown(rpc_method)),
-    };
+    let result = exec_rpc(ctx, mm, rpc_req).await?;
 
     // Now that we have our JSON result, time to send our JSON response
     let body_response = json!({
     "id": rpc_id,
-    "result": result_json
+    "result": result
     });
 
     Ok(Json(body_response))

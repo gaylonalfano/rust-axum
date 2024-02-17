@@ -1,16 +1,12 @@
-use crate::{
-    crypt::pwd,
-    ctx::Ctx,
-    model::{
-        user::{UserBmc, UserForLogin},
-        ModelManager,
-    },
-    web::{self, remove_token_cookie, Error, Result},
-};
+use crate::web::{self, remove_token_cookie, Error, Result};
 use axum::{extract::State, routing::post, Json, Router};
+use lib_auth::pwd::{self, EncryptContent};
+use lib_core::ctx::Ctx;
+use lib_core::model::user::{UserBmc, UserForLogin};
+use lib_core::model::ModelManager;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tower_cookies::{Cookie, Cookies};
+use tower_cookies::Cookies;
 use tracing::debug;
 
 // Common practice is to create a fn that returns the module Router
@@ -67,9 +63,9 @@ async fn api_login_handler(
     };
 
     pwd::validate_pwd(
-        &crate::crypt::EncryptContent {
+        &EncryptContent {
             content: pwd_clear.clone(),
-            salt: user.pwd_salt.to_string(),
+            salt: user.pwd_salt,
         },
         &pwd,
     )
@@ -87,7 +83,7 @@ async fn api_login_handler(
     // cookies.add(Cookie::new(web::AUTH_TOKEN, "user-1.exp.sign"));
     // - U: With auth-token gen/sign:
     // REF: https://youtu.be/3cA_mk4vdWY?t=10449
-    web::set_token_cookie(&cookies, &user.username, &user.token_salt.to_string())?;
+    web::set_token_cookie(&cookies, &user.username, user.token_salt)?;
 
     // Create the success body
     let body = Json(json!({

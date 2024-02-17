@@ -5,12 +5,11 @@ mod params;
 mod task_rpc;
 
 pub use self::error::{Error, Result};
-use params::*;
 
 use lib_core::ctx::Ctx;
 use lib_core::model::ModelManager;
 use serde::Deserialize;
-use serde_json::{from_value, json, to_value, Value};
+use serde_json::{from_value, to_value, Value};
 use task_rpc::{create_task, delete_task, list_tasks, update_task};
 
 // endregion:    -- Modules
@@ -21,10 +20,10 @@ use task_rpc::{create_task, delete_task, list_tasks, update_task};
 // NOTE: At this level we'll just use a generic JSON Value type,
 // but we'll do the actual parsing at the RPC routing level.
 #[derive(Deserialize)]
-struct RpcRequest {
-    id: Option<Value>,
-    method: String,
-    params: Option<Value>,
+pub struct RpcRequest {
+    pub id: Option<Value>,
+    pub method: String,
+    pub params: Option<Value>,
 }
 
 // endregion:    -- RPC Types
@@ -63,4 +62,34 @@ macro_rules! exec_rpc_fn {
     ($rpc_fn:expr, $ctx:expr, $mm:expr) => {
         $rpc_fn($ctx, $mm).await.map(to_value)??
     };
+}
+
+// NOTE: U: Multi-crate workspace moved rpc_handler and _rpc_handler fns
+// to the web-server. Adding a new helper fn here to compliment the
+// proc macro. This is basically the old _rpc_handler but renamed.
+pub async fn exec_rpc(ctx: Ctx, mm: ModelManager, rpc_req: RpcRequest) -> Result<Value> {
+    let rpc_method = rpc_req.method;
+    let rpc_params = rpc_req.params;
+
+    // -- Exec & store RpcInfo into response
+    let result_json: Value = match rpc_method.as_str() {
+        // -- Task RPC methods
+        "create_task" => exec_rpc_fn!(create_task, ctx, mm, rpc_params),
+        "list_tasks" => {
+            // NOTE: TIP: When first building a function, can add variables to debug,
+            // and then remove afterwards: let r = list_tasks() + todo!()
+            // NOTE: Using serde_json::to_value() returns a serde_json::Error,
+            // but we want a web::Error instead, so we need to add a new
+            // web::Error variant (SerdeJson(String)) and allow the conversion
+            // by impl From<serde_json::Error> for Error {}
+            exec_rpc_fn!(list_tasks, ctx, mm, rpc_params)
+        }
+        "update_task" => exec_rpc_fn!(update_task, ctx, mm, rpc_params),
+        "delete_task" => exec_rpc_fn!(delete_task, ctx, mm, rpc_params),
+
+        // -- Fallback as Err.
+        _ => return Err(Error::RpcMethodUnknown(rpc_method)),
+    };
+
+    Ok(result_json)
 }

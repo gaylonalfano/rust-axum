@@ -1,6 +1,6 @@
 use crate::model::base::{self, DbBmc};
-use crate::model::{Error, Result};
-use crate::{ctx::Ctx, model::model_manager::ModelManager};
+use crate::model::Result;
+use crate::{ctx::Ctx, model::ModelManager};
 use modql::field::Fields;
 use modql::filter::{FilterNodes, ListOptions, OpValsBool, OpValsInt64, OpValsString};
 use serde::{Deserialize, Serialize};
@@ -151,10 +151,13 @@ impl TaskBmc {
 #[cfg(test)]
 mod tests {
     #![allow(unused)]
-    use crate::_dev_utils;
+    pub type Result<T> = core::result::Result<T, Error>;
+    pub type Error = Box<dyn std::error::Error>; // For early dev & tests.
 
     use super::*;
-    use anyhow::Result;
+    use crate::_dev_utils;
+    // use crate::model::error::Error;
+
     use serde_json::json;
     use serial_test::serial;
 
@@ -226,7 +229,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(Error::EntityNotFound {
+                Err(crate::model::Error::EntityNotFound {
                     entity: "task",
                     id: 100 // Can't use variable in here!
                 })
@@ -382,7 +385,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(Error::EntityNotFound {
+                Err(crate::model::Error::EntityNotFound {
                     entity: "task",
                     id: 100
                 })

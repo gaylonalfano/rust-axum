@@ -1,5 +1,7 @@
+use crate::web;
 use derive_more::From;
-use serde_with::{serde_as, DisplayFromStr};
+use lib_auth::{pwd, token};
+use lib_core::model;
 use std::sync::Arc;
 
 // NOTE: Only our web crate errors moduls will know about Axum's
@@ -9,12 +11,12 @@ use std::sync::Arc;
 // we had to impl IntoResponse again and again. By making
 // only this web crate to know of Axum's IntoResponse, can make
 // it easier to change later on as we add more.
-use crate::{crypt, model, web};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use serde_with::{serde_as, DisplayFromStr};
 use tracing::debug;
 
 // NOTE: Error handling best practice/normalization
@@ -24,24 +26,14 @@ use tracing::debug;
 pub type Result<T> = core::result::Result<T, Error>;
 
 // U: Adding strum_macros to have variant name as string for errors
-// U: Adding Serialize so log_request error can serialize into JSON
+// NOTE: TIP: U: Adding Serialize so log_request error can serialize into JSON
 // Handy trick when Serializing enum is to specify the tag="type" (Variant name)
 // and content="data" (internal data for each variant e.g., { id: u64 })
 #[serde_as]
 #[derive(Debug, Serialize, strum_macros::AsRefStr, From)]
 #[serde(tag = "type", content = "data")]
 pub enum Error {
-    // -- RPC
-    RpcMethodUnknown(String),
-    RpcMissingParams {
-        rpc_method: String,
-    },
-    RpcFailJsonParams {
-        rpc_method: String,
-    },
-
     // -- Login
-    LoginFail,
     LoginFailUsernameNotFound,
     // NOTE: TIP: Use struct variant (instead of tuple) to make
     // clear the actual value: LoginFail { user_id: i64 }.
@@ -60,9 +52,13 @@ pub enum Error {
 
     // -- Modules
     #[from]
-    Crypt(crypt::Error),
-    #[from]
     Model(model::Error),
+    #[from]
+    Pwd(pwd::Error),
+    #[from]
+    Token(token::Error),
+    #[from]
+    Rpc(lib_rpc::Error),
 
     // -- External Modules
     #[from]

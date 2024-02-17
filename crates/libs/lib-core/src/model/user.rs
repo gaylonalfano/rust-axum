@@ -1,11 +1,11 @@
-use crate::crypt::{pwd, EncryptContent};
+// use crate::crypt::{pwd, EncryptContent};
 use crate::ctx::Ctx;
 use crate::model::base::{self, DbBmc};
 use crate::model::ModelManager;
-use crate::model::{Error, Result};
+use crate::model::Result;
+use lib_auth::pwd::{self, EncryptContent};
 use modql::field::{Fields, HasFields};
-use modql::SIden;
-use sea_query::{Expr, Iden, PostgresQueryBuilder, Query, SimpleExpr, TableRef};
+use sea_query::{Expr, Iden, PostgresQueryBuilder, Query, SimpleExpr};
 use sea_query_binder::SqlxBinder;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -13,7 +13,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 // region: -- User Types
-#[derive(Clone, Fields, FromRow, Serialize)]
+#[derive(Clone, Fields, FromRow, Debug, Serialize)]
 pub struct User {
     // NOTE: ! - Don't add pwd here as it will be Serialized
     // and sent back... where?
@@ -31,10 +31,10 @@ pub struct UserForCreate {
 }
 
 // NOTE: For user module impl. (e.g., inside UserBmc::create fn)
-// This is when we insert a new user. Not public.
+// This is when we insert a new user.
 #[derive(Fields)]
-struct UserForInsert {
-    username: String,
+pub struct UserForInsert {
+    pub username: String,
 }
 
 // NOTE: Read only to validate login info.
@@ -115,7 +115,7 @@ impl UserBmc {
     where
         E: UserBy,
     {
-        // NOTE: This fun deviates from base, so we go back to custom
+        // NOTE: This function deviates from base, so we go back to custom
         // sqlx and sqlb.
         let db = mm.db();
 
@@ -146,7 +146,7 @@ impl UserBmc {
         let user: UserForLogin = Self::get(ctx, mm, id).await?;
         let pwd = pwd::encrypt_pwd(&EncryptContent {
             content: pwd_clear.to_string(),
-            salt: user.pwd_salt.to_string(),
+            salt: user.pwd_salt,
         })?;
 
         // -- Build query
@@ -174,9 +174,11 @@ impl UserBmc {
 #[cfg(test)]
 mod tests {
     #![allow(unused)]
+    pub type Result<T> = core::result::Result<T, Error>;
+    pub type Error = Box<dyn std::error::Error>; // For early dev & tests.
+
     use super::*;
     use crate::_dev_utils;
-    use anyhow::{Context, Result};
     use serial_test::serial;
 
     #[serial]
@@ -190,9 +192,9 @@ mod tests {
         // -- Exec
         // NOTE: Cool thing is we can have user be UserForLogin or UserForAuth because
         // they ALL impl for<'r> FromRow<'r> + HasFields + Unpin + Send! Neat!
-        let user: UserForLogin = UserBmc::first_by_username(&ctx, &mm, fx_username)
+        let user: User = UserBmc::first_by_username(&ctx, &mm, fx_username)
             .await?
-            .context("Should have user 'demo1'")?;
+            .ok_or("Should have user 'demo1'")?;
 
         // -- Check
         assert_eq!(user.username, fx_username);

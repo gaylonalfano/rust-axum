@@ -1,18 +1,18 @@
 use crate::b64::b64u_decode;
-use std::{env, str::FromStr, sync::OnceLock};
+use std::{env, str::FromStr};
 
-fn get_env(name: &'static str) -> Result<String> {
+pub fn get_env(name: &'static str) -> Result<String> {
     env::var(name).map_err(|_| Error::MissingEnv(name))
 }
 
-fn get_env_base64url_as_u8s(name: &'static str) -> Result<Vec<u8>> {
+pub fn get_env_base64url_as_u8s(name: &'static str) -> Result<Vec<u8>> {
     // decode() has its own error, but to use our own custom error, we can use map_err()
     b64u_decode(&get_env(name)?).map_err(|_| Error::WrongFormat(name))
 }
 
 // NOTE: Using a general parse<T: FromStr> so we can return multiple
 // types i.e. i32, i64, etc.
-fn get_env_parse<T: FromStr>(name: &'static str) -> Result<T> {
+pub fn get_env_parse<T: FromStr>(name: &'static str) -> Result<T> {
     let val = get_env(name)?;
     // We don't want to pass through the parse() error, so instead we map_err to our own error
     // TODO: Could consider expanding map_err closure to specify the expected type.

@@ -1,18 +1,15 @@
+use crate::web::{set_token_cookie, Error, Result, AUTH_TOKEN};
 use async_trait::async_trait;
 use axum::extract::{FromRequestParts, State};
 use axum::http::request::Parts;
-use axum::RequestPartsExt;
 use axum::{body::Body, http::Request, middleware::Next, response::Response};
-use lazy_regex::regex_captures;
+use lib_auth::token::{validate_web_token, Token};
+use lib_core::ctx::Ctx;
+use lib_core::model::user::{UserBmc, UserForAuth};
+use lib_core::model::ModelManager;
 use serde::Serialize;
 use tower_cookies::{Cookie, Cookies};
 use tracing::debug;
-
-use crate::crypt::token::{validate_web_token, Token};
-use crate::ctx::Ctx;
-use crate::model::user::{UserBmc, UserForAuth};
-use crate::model::ModelManager;
-use crate::web::{set_token_cookie, Error, Result, AUTH_TOKEN};
 
 pub async fn mw_ctx_require(
     // cookies: Cookies,
@@ -108,17 +105,18 @@ async fn _ctx_resolve(mm: State<ModelManager>, cookies: &Cookies) -> CtxExtResul
         .ok_or(CtxExtError::UserNotFound)?;
 
     // -- Validate Token
-    validate_web_token(&token, &user.token_salt.to_string())
-        .map_err(|_| CtxExtError::FailValidate)?;
+    validate_web_token(&token, user.token_salt).map_err(|_| CtxExtError::FailValidate)?;
 
     // -- Update Token & Cookies
-    set_token_cookie(cookies, &user.username, &user.token_salt.to_string())
+    set_token_cookie(cookies, &user.username, user.token_salt)
         .map_err(|_| CtxExtError::CannotSetTokenCookie)?;
 
     // -- Create CtxExtResult to be added to Request extension
     // NOTE: Recall that CtxExtResult is independent of the web layer, so that's why
     // there is no cookie, token, etc.
-    Ctx::new(user.id).map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string()))
+    Ctx::new(user.id)
+        .map(CtxW)
+        .map_err(|ex| CtxExtError::CtxCreateFail(ex.to_string()))
 }
 
 // region: -- Ctx Extractor
@@ -150,7 +148,7 @@ impl<S: Send + Sync> FromRequestParts<S> for CtxW {
 
     // NOTE: Recall that our custom Result type still handles the Error (Rejection),
     // we just don't have to specify Result<Self, Self::Rejection>
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self> {
         debug!("{:<12} - Ctx", "EXTRACTOR");
 
         // region: -- NEW Cookies and token components validation

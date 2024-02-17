@@ -1,8 +1,8 @@
+use crate::model::store;
 use derive_more::From;
+use lib_auth::pwd;
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
-
-use crate::{crypt, model::store};
 
 // NOTE: Error handling best practice/normalization
 // REF: https://youtu.be/XZtlD_m59sM
@@ -39,7 +39,7 @@ pub enum Error {
     // to 'pwd' crate. I'll do that later in ep05 I think when he gets
     // into password hashing updates.
     #[from]
-    Crypt(crypt::Error),
+    Pwd(pwd::Error),
     #[from]
     Store(store::Error),
 

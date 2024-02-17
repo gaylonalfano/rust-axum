@@ -1,13 +1,10 @@
 use crate::model::{Error, Result};
-use crate::{ctx::Ctx, model::model_manager::ModelManager};
+use crate::{ctx::Ctx, model::ModelManager};
 use modql::field::HasFields;
-use modql::filter::{FilterGroup, FilterGroups, ListOptions};
+use modql::filter::{FilterGroups, ListOptions};
 use modql::SIden;
-use sea_query::{
-    Condition, ConditionalStatement, Expr, Iden, IntoIden, PostgresQueryBuilder, Query, TableRef,
-};
+use sea_query::{Condition, Expr, Iden, IntoIden, PostgresQueryBuilder, Query, TableRef};
 use sea_query_binder::SqlxBinder;
-use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::FromRow;
 

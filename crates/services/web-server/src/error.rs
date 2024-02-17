@@ -1,5 +1,5 @@
-use crate::model;
 use derive_more::From;
+use lib_core::model;
 
 // NOTE: Error handling best practice/normalization
 // REF: https://youtu.be/XZtlD_m59sM

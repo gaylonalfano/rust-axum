@@ -1,55 +1,34 @@
-#![allow(unused)] // For beginners
+// #![allow(unused)] // For beginners
 
 mod config;
-mod crypt;
-mod ctx;
 mod error;
 mod log;
-mod model;
-mod utils;
 mod web;
-
-// #[cfg(test)] // Commented during early development
-pub mod _dev_utils;
-
-use crate::web::{
-    mw_auth::{mw_ctx_require, mw_ctx_resolve},
-    mw_res_map::mw_response_map,
-};
 
 // Re-export our new custom Error and Result from error.rs
 // We now have a crate Error and crate Result we can import
 // into other modules.
 pub use self::error::{Error, Result};
-pub use config::*;
+pub use config::web_config;
 
-use axum::{
-    extract::{Path, Query},
-    http::{Method, Uri},
-    middleware,
-    response::{Html, IntoResponse, Response},
-    routing::{get, get_service},
-    Json, Router,
+use crate::web::{
+    mw_auth::{mw_ctx_require, mw_ctx_resolve},
+    mw_res_map::mw_response_map,
+    routes_login, routes_rpc, routes_static,
 };
-use ctx::*; // Custom Extractor
-use error::*;
-use log::*;
-use model::*;
-use serde::Deserialize;
-use serde_json::json;
-use std::{env, net::SocketAddr};
+use axum::{middleware, Router};
+use lib_core::_dev_utils;
+use lib_core::model::ModelManager;
 use tokio::net::TcpListener;
 use tower_cookies::CookieManagerLayer;
-use tower_http::services::ServeDir;
-use tracing::{debug, info};
+use tracing::info;
 use tracing_subscriber::EnvFilter;
-use uuid::Uuid;
-use web::*;
 
+// endregion:    -- Modules
 #[tokio::main]
 async fn main() -> Result<()> {
     // -- Enable RUST_BACKTRACE
-    env::set_var("RUST_BACKTRACE", "1");
+    // env::set_var("RUST_BACKTRACE", "1");
 
     // -- Tracing
     tracing_subscriber::fmt()
@@ -67,7 +46,8 @@ async fn main() -> Result<()> {
     let mm = ModelManager::new().await?;
 
     // -- Define Routes
-    let routes_rpc = rpc::routes(mm.clone()).route_layer(middleware::from_fn(mw_ctx_require));
+    let routes_rpc =
+        routes_rpc::routes(mm.clone()).route_layer(middleware::from_fn(mw_ctx_require));
 
     // NOTE: You could create a separate struct for mw, but the from_fn() is very
     // powerful
@@ -80,7 +60,6 @@ async fn main() -> Result<()> {
     // // REF: https://tokio.rs/blog/2021-05-14-inventing-the-service-trait
     let routes_all = Router::new()
         .merge(routes_login::routes(mm.clone()))
-        .merge(routes_hello())
         // NOTE: By nesting (merging), we are basically attaching a subrouter
         .nest("/api", routes_rpc)
         .layer(middleware::map_response(mw_response_map))
@@ -98,34 +77,4 @@ async fn main() -> Result<()> {
     // region: -- end Start Server
 
     Ok(())
-}
-
-// Create a sub-router (like Chi in Go) and merge with main router
-fn routes_hello() -> Router {
-    Router::new()
-        .route("/hello", get(handler_hello))
-        .route("/hello2/:name", get(handler_hello2))
-        .route_layer(middleware::from_fn(mw_ctx_require))
-}
-
-#[derive(Debug, Deserialize)]
-struct HelloParams {
-    name: Option<String>,
-}
-
-// Using Axum's Query extractor helper that deserializes query strings into some type
-// e.g., `/hello?name=Mario` -- as a query string
-async fn handler_hello(Query(params): Query<HelloParams>) -> impl IntoResponse {
-    debug!("{:<12} - handler_hello - {params:?}", "HANDLER");
-
-    let name = params.name.as_deref().unwrap_or("World");
-
-    Html(format!("Hello <strong>{name}!</strong>"))
-}
-
-// e.g., `/hello2/Mario` -- as a path
-async fn handler_hello2(Path(name): Path<String>) -> impl IntoResponse {
-    debug!("{:<12} - handler_hello2 - {name:?}", "HANDLER");
-
-    Html(format!("Hello2 <strong>{name}!</strong>"))
 }

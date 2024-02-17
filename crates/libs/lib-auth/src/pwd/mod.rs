@@ -4,7 +4,7 @@ mod hmac_encrypt_hasher;
 pub use self::error::{Error, Result};
 
 use crate::auth_config;
-use crate::pwd::hmac_encrypt_hasher::encrypt_into_base64url;
+pub use crate::pwd::hmac_encrypt_hasher::encrypt_into_base64url;
 use uuid::Uuid;
 
 // NOTE: When a user enters their password to log in,
@@ -19,7 +19,7 @@ pub struct EncryptContent {
     // Q: What is Clear mean?
     // A: I think it's the raw, unencrypted string
     pub content: String, // Clear content.
-    pub salt: String,    // Clear salt.
+    pub salt: Uuid,      // Clear salt.
 }
 
 /// Encrypt the password with default scheme (multi-scheme comes later)

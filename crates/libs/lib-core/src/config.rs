@@ -31,7 +31,7 @@ pub struct CoreConfig {
     pub WEB_FOLDER: String,
 }
 
-impl Config {
+impl CoreConfig {
     fn load_from_env() -> lib_utils::envs::Result<CoreConfig> {
         Ok(CoreConfig {
             // -- Db

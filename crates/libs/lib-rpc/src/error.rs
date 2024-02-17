@@ -18,11 +18,11 @@ use serde_with::{serde_as, DisplayFromStr};
 pub type Result<T> = core::result::Result<T, Error>;
 
 // U: Adding strum_macros to have variant name as string for errors
-// U: Adding Serialize so log_request error can serialize into JSON
-// Handy trick when Serializing enum is to specify the tag="type" (Variant name)
+// NOTE: TIP: U: Adding Serialize so log_request error can serialize into JSON
+// Handy trick when Serializing enum is to specify the tag="type" (Variant name e.g. LoginFail)
 // and content="data" (internal data for each variant e.g., { id: u64 })
 #[serde_as]
-#[derive(Debug, Serialize, strum_macros::AsRefStr, From)]
+#[derive(Debug, Serialize, From)]
 #[serde(tag = "type", content = "data")]
 pub enum Error {
     // -- RPC

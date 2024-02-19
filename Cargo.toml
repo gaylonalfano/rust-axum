@@ -1,6 +1,6 @@
 [workspace.lints.rust]
 unsafe_code = "forbid"
-# unused = "allow" # For experimental dev.
+unused = "allow"       # For experimental dev.
 
 [workspace]
 # NOTE: 'resolver = 2' is saying we do NOT have a base package (I think)

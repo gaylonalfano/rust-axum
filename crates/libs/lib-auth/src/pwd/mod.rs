@@ -1,48 +1,75 @@
-mod error;
-mod hmac_encrypt_hasher;
+// region:       -- Modules
 
+// Modules
+mod error;
+mod scheme;
+
+// Re-exports
 pub use self::error::{Error, Result};
 
-use crate::auth_config;
-pub use crate::pwd::hmac_encrypt_hasher::encrypt_into_base64url;
+// Imports
 use uuid::Uuid;
+
+// endregion:    -- Modules
 
 // NOTE: When a user enters their password to log in,
 // their entered password is salted and hashed, and the
 // resulting hash value is compared to the stored hash value.
 // If the hash values match, the user is authenticated.
 
-// WARN: Jeremy renamed to ContentToHash
-pub struct EncryptContent {
-    // NOTE: Using String types since it's easy to convert
-    // into array of bytes from String.
-    // Q: What is Clear mean?
-    // A: I think it's the raw, unencrypted string
-    pub content: String, // Clear content.
-    pub salt: Uuid,      // Clear salt.
+// region:       -- Types
+
+pub struct ContentToHash {
+    pub content: String, // Clear content
+    pub salt: Uuid,
 }
 
-/// Encrypt the password with default scheme (multi-scheme comes later)
-/// Format is: #scheme#encrypted_content ---- #01#_encrypted_pwd_b64u_
-/// EncryptContent is the Clear content to be encrypted
-pub fn encrypt_pwd(enc_content: &EncryptContent) -> Result<String> {
-    let key = &auth_config().PWD_KEY;
+// endregion:    -- Types
 
-    let encrypted = encrypt_into_base64url(key, enc_content)?;
+// region:       -- Public Functions
 
-    // NOTE: We return the scheme along with the encrypted. This way,
-    // when we later have multiple schemes (#01#, #02#, #03#, etc),
-    // we can match to all schemes when we validate passwords.
-    Ok(format!("#01#{encrypted}"))
+/// Hash the password with the default scheme
+pub fn hash_pwd(to_hash: &ContentToHash) -> Result<String> {
+    // FIXME:
+    Ok("FIXME hash_pwd".to_string())
 }
 
-/// Validate if an EncryptContent matches
-pub fn validate_pwd(enc_content: &EncryptContent, pwd_ref: &str) -> Result<()> {
-    let pwd = encrypt_pwd(enc_content)?;
+/// Validate if a ContentToHash matches
+pub fn validate_pwd(to_hash: &ContentToHash, pwd_ref: &str) -> Result<String> {
+    // FIXME:
+    Ok("FIXME validate_pwd".to_string())
+}
 
-    if pwd == pwd_ref {
+// endregion:    -- Public Functions
+
+// region:       -- Private Types, Functions
+
+// endregion:    -- Private Types, Functions
+
+// region:       -- Tests
+
+mod tests {
+    pub type Result<T> = core::result::Result<T, Error>;
+    pub type Error = Box<dyn std::error::Error>; // For tests
+
+    use super::*;
+
+    #[test]
+    fn test_multi_scheme_ok() -> Result<()> {
+        // -- Setup & Fixtures
+        let fx_salt = Uuid::parse_str("f05e8961-d6ad-4086-9e78-a6de065e5453")?;
+        let fx_to_hash = ContentToHash {
+            content: "hello world".to_string(),
+            salt: fx_salt,
+        };
+
+        // -- Exec
+        let pwd_hashed = hash_pwd(&fx_to_hash)?;
+        println!("->> pwd_hashed: {pwd_hashed}");
+        let pwd_validate = validate_pwd(&fx_to_hash, &pwd_hashed)?;
+        println!("->>   validate: {pwd_validate:?}");
+
         Ok(())
-    } else {
-        Err(Error::NotMatching)
     }
 }
+// endregion:    -- Tests

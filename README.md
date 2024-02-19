@@ -54,6 +54,7 @@ cargo watch -qcw examples/ -x "run --example quick_dev"
 ## Unit Test (watch)
 
 ```sh
+# NOTE: -- --nocapture will print out the test results. Good for early dev.
 cargo watch -qcx "test -- --nocapture"
 
 # All tests in a package
@@ -61,6 +62,9 @@ cargo watch -qcx "test model::task::tests -- --nocapture"
 
 # Specific test with filter
 cargo watch -qcx "test model::task::tests::test_create_ok"
+
+# Quick specific test while developing
+cargo watch -qcx "test -q -p lib-auth test_multi_scheme -- --nocapture"
 
 ```
 

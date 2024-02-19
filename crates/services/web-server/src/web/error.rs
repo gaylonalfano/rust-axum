@@ -1,6 +1,6 @@
 use crate::web;
 use derive_more::From;
-use lib_auth::{pwd, token};
+use lib_auth::{pwd_legacy, token};
 use lib_core::model;
 use std::sync::Arc;
 
@@ -54,7 +54,7 @@ pub enum Error {
     #[from]
     Model(model::Error),
     #[from]
-    Pwd(pwd::Error),
+    Pwd(pwd_legacy::Error),
     #[from]
     Token(token::Error),
     #[from]

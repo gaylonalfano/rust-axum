@@ -1,4 +1,9 @@
-use std::{fs, path::PathBuf, time::Duration};
+use std::{
+    env::current_dir,
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 // NOTE:
 // We first execute recreate-db.sql as root_user
@@ -25,7 +30,7 @@ const PG_DEV_POSTGRES_URL: &str = "postgres://postgres:welcome@localhost/postgre
 const PG_DEV_APP_URL: &str = "postgres://app_user:dev_only_pwd@localhost/app_db";
 
 // sql files
-const SQL_RECREATE_DB: &str = "sql/dev_initial/00-recreate-db.sql";
+const SQL_RECREATE_DB_FILE_NAME: &str = "00-recreate-db.sql";
 const SQL_DIR: &str = "sql/dev_initial";
 
 const DEMO_PWD: &str = "welcome";
@@ -36,17 +41,38 @@ const DEMO_PWD: &str = "welcome";
 pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
     info!("{:<12} - init_dev_db()", "FOR-DEV-ONLY");
 
+    // FIXME: Need to get the sql_dir
+    // -- Get the correct sql_dir path
+    // NOTE: !! U: cargo test and cargo run won't give the same current_dir
+    // given the workspace layout.
+    let current_dir = std::env::current_dir().unwrap();
+    let v: Vec<_> = current_dir.components().collect();
+    // println!("current_dir components length: {:?}", v.len()); // 8
+    let path_component = v.get(v.len().wrapping_sub(3));
+    // println!("path_component: {:?}", path_component); // path_component: Some(Normal("crates"))
+    let base_dir = if Some(true) == path_component.map(|c| c.as_os_str() == "crates") {
+        v[..v.len() - 3].iter().collect::<PathBuf>()
+    } else {
+        current_dir.clone()
+    };
+    // println!("base_dir: {:?}", base_dir); // "/Users/gaylonalfano/Code/rust-axum"
+    let sql_dir = base_dir.join(SQL_DIR);
+    // println!("sql_dir: {:?}", sql_dir); // "/Users/gaylonalfano/Code/rust-axum/sql/dev_initial"
+
     // -- Create the app_db/app_user with the postgres user
     // NOTE: To ensure that root_db is not accessible after its
     // intended use, we can scope its lifetime to a new block {},
     // or use the drop(root_db) function. Both work.
     {
+        // NOTE: U: Use our updated sql_dir path to build db file path
+        let sql_recreate_db_file = sql_dir.join(SQL_RECREATE_DB_FILE_NAME);
+        println!("sql_recreate_db_file: {:?}", sql_recreate_db_file);
         let root_db = new_db_pool(PG_DEV_POSTGRES_URL).await?;
-        pexec(&root_db, SQL_RECREATE_DB).await?;
+        pexec(&root_db, &sql_recreate_db_file).await?;
     }
 
     // -- Get sql files
-    let mut paths: Vec<PathBuf> = fs::read_dir(SQL_DIR)?
+    let mut paths: Vec<PathBuf> = fs::read_dir(sql_dir)?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
         .collect();
     // Be sure to sort the paths so we get them in order 00, 01, 02, ...
@@ -55,15 +81,21 @@ pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
     // -- SQL execute each file
     let app_db = new_db_pool(PG_DEV_APP_URL).await?;
     for path in paths {
-        if let Some(path) = path.to_str() {
-            let path = path.replace('\\', "/"); // for Windows
+        // U: Need a separate PathBuf and String. pexec() takes Path now.
+        let path_str = path.to_string_lossy();
 
-            // Only take the .sql and skip the SQL_RECREATE_DB
-            // We could've added this check inside the filter_map(). Either works.
-            if path.ends_with(".sql") && path != SQL_RECREATE_DB {
-                pexec(&app_db, &path).await?;
-            }
+        if path_str.ends_with(".sql") && !path_str.ends_with(SQL_RECREATE_DB_FILE_NAME) {
+            pexec(&app_db, &path).await?;
         }
+        // if let Some(path) = path.to_str() {
+        //     let path = path.replace('\\', "/"); // for Windows
+        //
+        //     // Only take the .sql and skip the SQL_RECREATE_DB
+        //     // We could've added this check inside the filter_map(). Either works.
+        //     if path.ends_with(".sql") && path != SQL_RECREATE_DB_FILE_NAME {
+        //         pexec(&app_db, &path).await?;
+        //     }
+        // }
     }
 
     // -- Initialize model layer
@@ -85,8 +117,8 @@ pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // Execute single sql files
-async fn pexec(db: &Db, file: &str) -> Result<(), sqlx::Error> {
-    info!("{:<12} - pexec: {file}", "FOR-DEV-ONLY");
+async fn pexec(db: &Db, file: &Path) -> Result<(), sqlx::Error> {
+    info!("{:<12} - pexec: {file:?}", "FOR-DEV-ONLY");
     // E.g. INFO FOR-DEV-ONLY - pexec: sql/dev_initial/00-recreate-db.sql
 
     // -- Read the file

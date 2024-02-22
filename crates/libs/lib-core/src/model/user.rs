@@ -3,7 +3,7 @@ use crate::ctx::Ctx;
 use crate::model::base::{self, DbBmc};
 use crate::model::ModelManager;
 use crate::model::Result;
-use lib_auth::pwd_legacy::{self, EncryptContent};
+use lib_auth::pwd::{self, ContentToHash};
 use modql::field::{Fields, HasFields};
 use sea_query::{Expr, Iden, PostgresQueryBuilder, Query, SimpleExpr};
 use sea_query_binder::SqlxBinder;
@@ -144,7 +144,7 @@ impl UserBmc {
 
         // -- Prep password. Assumes we already have the user id
         let user: UserForLogin = Self::get(ctx, mm, id).await?;
-        let pwd = pwd_legacy::encrypt_pwd(&EncryptContent {
+        let pwd = pwd::hash_pwd(&ContentToHash {
             content: pwd_clear.to_string(),
             salt: user.pwd_salt,
         })?;

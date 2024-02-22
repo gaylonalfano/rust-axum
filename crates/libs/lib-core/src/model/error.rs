@@ -1,6 +1,6 @@
 use crate::model::store;
 use derive_more::From;
-use lib_auth::pwd_legacy;
+use lib_auth::pwd;
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
 
@@ -39,7 +39,7 @@ pub enum Error {
     // to 'pwd' crate. I'll do that later in ep05 I think when he gets
     // into password hashing updates.
     #[from]
-    Pwd(pwd_legacy::Error),
+    Pwd(pwd::Error),
     #[from]
     Store(store::Error),
 

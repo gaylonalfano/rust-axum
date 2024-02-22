@@ -2,8 +2,15 @@ use serde::Serialize;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
+// NOTE: Again, for the RequestLogLine we're using JSON serialization
 #[derive(Debug, Serialize)]
-pub enum Error {}
+pub enum Error {
+    Key,
+    Salt,
+    Hash,
+    PwdValidate,
+    SchemeNotFound(String), // We'll store the attempted scheme
+}
 
 // region:    --- Error Boilerplate
 impl core::fmt::Display for Error {

@@ -1,6 +1,6 @@
 use crate::web::{self, remove_token_cookie, Error, Result};
 use axum::{extract::State, routing::post, Json, Router};
-use lib_auth::pwd::{self, ContentToHash};
+use lib_auth::pwd::{self, ContentToHash, SchemeStatus};
 use lib_core::ctx::Ctx;
 use lib_core::model::user::{UserBmc, UserForLogin};
 use lib_core::model::ModelManager;
@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use tower_cookies::Cookies;
 use tracing::debug;
 
-// Common practice is to create a fn that returns the module Router
+// NOTE: TIP: Common practice is to create a fn that returns the module Router
 // and then merge(web::routes_login::routes()) inside main
 // NOTE: U: Adding ModelManager to the routes so we can add AppState
 // using with_state() for real db/auth login logic. We then use
@@ -62,7 +62,9 @@ async fn api_login_handler(
         return Err(Error::LoginFailUserHasNoPwd { user_id });
     };
 
-    pwd::validate_pwd(
+    // NOTE: U: Now with Scheme and SchemeStatus, we want to capture
+    // SchemeStatus and auto-upgrade to Scheme02 if SchemeStatus::Outdated.
+    let scheme_status = pwd::validate_pwd(
         &ContentToHash {
             content: pwd_clear.clone(),
             salt: user.pwd_salt,
@@ -70,6 +72,14 @@ async fn api_login_handler(
         &pwd,
     )
     .map_err(|_| Error::LoginFailPwdNotMatching { user_id })?;
+
+    // -- Update password scheme if needed
+    // NOTE: U: Now with Scheme and SchemeStatus, we want to capture
+    // SchemeStatus and auto-upgrade to Scheme02 if SchemeStatus::Outdated.
+    if let SchemeStatus::Outdated = scheme_status {
+        debug!("pwd encrypt scheme outdated, upgrading.");
+        UserBmc::update_pwd(&root_ctx, &mm, user_id, &pwd_clear).await?;
+    }
 
     // // -- Fake Login:
     // // TODO: Implement real db/auth logic

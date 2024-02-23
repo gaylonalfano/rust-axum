@@ -4,14 +4,14 @@
 mod error;
 mod scheme;
 
-use std::str::FromStr;
-
 // Re-exports
 pub use self::error::{Error, Result};
-use self::scheme::{get_scheme, SchemeStatus, DEFAULT_SCHEME};
+pub use scheme::SchemeStatus;
 
-use lazy_regex::regex_captures;
 // Imports
+use crate::pwd::scheme::{get_scheme, Scheme, DEFAULT_SCHEME};
+use lazy_regex::regex_captures;
+use std::str::FromStr;
 use uuid::Uuid;
 
 // endregion:    -- Modules
@@ -20,6 +20,14 @@ use uuid::Uuid;
 // their entered password is salted and hashed, and the
 // resulting hash value is compared to the stored hash value.
 // If the hash values match, the user is authenticated.
+// NOTE: !! If a user's pwd originally used Scheme01 when created,
+// we can upgrade the password using Scheme02 the next time
+// the user logs in (it's the only time we'll have the CLEAR, non-hashed pwd!).
+// This means that we need to check which scheme is used for the user's
+// login pwd when logging in.
+// REF: https://youtu.be/3E0zK5h9zEs?t=2936
+// NOTE: Recall that our api_login_handler() will have the State<ModelManager>,
+// Cookies, and Json<LoginPayload>, which will have the user's clear password.
 
 // region:       -- Types
 
@@ -129,10 +137,24 @@ mod tests {
         };
 
         // -- Exec
-        let pwd_hashed = hash_pwd(&fx_to_hash)?;
-        println!("->> pwd_hashed: {pwd_hashed}");
+        // NOTE: !! U: Auto-upgrade a user's pwd to Scheme02 if originally Scheme01.
+        // ONLY our pwd/mod.rs has access to hash_for_scheme(), but since this local
+        // 'tests' module is a child of our pwd module, children can see what parents
+        // have (i.e., the private function hash_for_scheme()), so it's accessible here.
+        let pwd_hashed = hash_for_scheme("01", &fx_to_hash)?;
+        // println!("->> pwd_hashed: {pwd_hashed}");
         let pwd_validate = validate_pwd(&fx_to_hash, &pwd_hashed)?;
-        println!("->>   validate: {pwd_validate:?}");
+        // println!("->>   validate: {pwd_validate:?}");
+
+        // -- Check
+        // NOTE: !! U: We want to check that we get SchemeStatus::Outdated,
+        // since we now are using Scheme02 as default, and we're testing
+        // that we will auto-upgrade from Scheme01 to Scheme02.
+        // Recall that pwd_validate() -> SchemeStatus
+        assert!(
+            matches!(pwd_validate, SchemeStatus::Outdated),
+            "status should be SchemeStatus::Outdated"
+        );
 
         Ok(())
     }

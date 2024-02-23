@@ -1,5 +1,4 @@
 use std::{
-    env::current_dir,
     fs,
     path::{Path, PathBuf},
     time::Duration,
@@ -41,7 +40,6 @@ const DEMO_PWD: &str = "welcome";
 pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
     info!("{:<12} - init_dev_db()", "FOR-DEV-ONLY");
 
-    // FIXME: Need to get the sql_dir
     // -- Get the correct sql_dir path
     // NOTE: !! U: cargo test and cargo run won't give the same current_dir
     // given the workspace layout.
@@ -105,7 +103,7 @@ pub async fn init_dev_db() -> Result<(), Box<dyn std::error::Error>> {
     // -- Set demo1 pwd
     // NOTE: We create a "demo1" user inside our sql 02-dev-seed.sql file,
     // so this is just getting the user from the db and then using our
-    // custom update_pwd(). Log in to psql and select * from "users"; to
+    // custom update_pwd(). Log in to psql and select * from "user"; to
     // see the updated encrypted password.
     let demo1_user: User = UserBmc::first_by_username(&ctx, &mm, "demo1")
         .await?

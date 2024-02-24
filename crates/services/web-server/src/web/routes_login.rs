@@ -65,12 +65,13 @@ async fn api_login_handler(
     // NOTE: U: Now with Scheme and SchemeStatus, we want to capture
     // SchemeStatus and auto-upgrade to Scheme02 if SchemeStatus::Outdated.
     let scheme_status = pwd::validate_pwd(
-        &ContentToHash {
+        ContentToHash {
             content: pwd_clear.clone(),
             salt: user.pwd_salt,
         },
-        &pwd,
+        pwd,
     )
+    .await
     .map_err(|_| Error::LoginFailPwdNotMatching { user_id })?;
 
     // -- Update password scheme if needed

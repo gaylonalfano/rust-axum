@@ -1,3 +1,19 @@
+//! The pwd module is responsible for hashing and validating hashes.
+//! It follows a multi-scheme hashing code design, allowing each
+//! scheme to provide its own hashing and validation methods.
+//!
+//! Code Design Points:
+//!
+//! - Exposes two public async functions `hash_pwd(...)` and `validate_pwd(...)`
+//! - `ContentToHash` represents the data to be hashed along with the corresponding salt.
+//! - `SchemeStatus` is the result of `validate_pwd` which, upon successful validation, indicates
+//!   whether the password needs to be re-hashed to adopt the latest scheme.
+//! - Internally, the `pwd` module implements a multi-scheme code design with the `Scheme` trait.
+//! - The `Scheme` trait exposes sync functions `hash` and `validate` to be implemented for each scheme.
+//! - The two public async functions `hash_pwd(...)` and `validate_pwd(...)` call the scheme using
+//!   `spawn_blocking` to ensure that long hashing/validation processes do not hinder the execution of smaller tasks.
+//! - Schemes are designed to be agnostic of whether they are in an async or sync context, hence they are async-free.
+
 // region:       -- Modules
 
 // Modules
@@ -28,9 +44,16 @@ use uuid::Uuid;
 // REF: https://youtu.be/3E0zK5h9zEs?t=2936
 // NOTE: Recall that our api_login_handler() will have the State<ModelManager>,
 // Cookies, and Json<LoginPayload>, which will have the user's clear password.
+// NOTE: U: Added tokio spawn_blocking for Argon2: https://youtu.be/hBsmOjgdrr0?list=PL7r-PXl6ZPcCLvwpdD2Vj1O4CyoFTiHKd&t=179
 
 // region:       -- Types
 
+/// The clean content to hash, with the salt.
+///
+/// Notes:
+///    - Since content is sensitive information, we do NOT implement default debug for this struct.
+///    - The clone is only implement for testing
+#[cfg_attr(test, derive(Clone))]
 pub struct ContentToHash {
     pub content: String, // Clear content
     pub salt: Uuid,
@@ -41,12 +64,14 @@ pub struct ContentToHash {
 // region:       -- Public Functions
 
 /// Hash the password with the default scheme
-pub fn hash_pwd(to_hash: &ContentToHash) -> Result<String> {
-    hash_for_scheme(DEFAULT_SCHEME, to_hash)
+pub async fn hash_pwd(to_hash: ContentToHash) -> Result<String> {
+    tokio::task::spawn_blocking(move || hash_for_scheme(DEFAULT_SCHEME, to_hash))
+        .await
+        .map_err(|_| Error::FailSpawnBlockForHash)?
 }
 
 /// Validate if a ContentToHash matches
-pub fn validate_pwd(to_hash: &ContentToHash, pwd_ref: &str) -> Result<SchemeStatus> {
+pub async fn validate_pwd(to_hash: ContentToHash, pwd_ref: String) -> Result<SchemeStatus> {
     // -- Parse the password to see which scheme it is
     // NOTE: This is where our impl FromStr for PwdParts helps
     let PwdParts {
@@ -54,38 +79,43 @@ pub fn validate_pwd(to_hash: &ContentToHash, pwd_ref: &str) -> Result<SchemeStat
         hashed,
     } = pwd_ref.parse()?;
 
-    validate_for_scheme(&scheme_name, to_hash, &hashed)?;
-
     // NOTE: !! We don't have access to the database from this crate,
     // so we can only validate (can't update) and send back information
     // so that other modules can do all the database related stuff.
-    if scheme_name == DEFAULT_SCHEME {
-        Ok(SchemeStatus::Ok)
+    // NOTE: U: We do this first so we don't have to clone the scheme_name
+    let scheme_status = if scheme_name == DEFAULT_SCHEME {
+        SchemeStatus::Ok
     } else {
-        Ok(SchemeStatus::Outdated)
-    }
+        SchemeStatus::Outdated
+    };
+
+    // NOTE: Since validte might take time depending on algo, we use tokio's
+    // spawn_blocking to avoid locking up the OS thread.
+    tokio::task::spawn_blocking(move || validate_for_scheme(&scheme_name, to_hash, hashed))
+        .await
+        .map_err(|_| Error::FailSpawnBlockForValidate)??;
+
+    Ok(scheme_status)
 }
 
 // endregion:    -- Public Functions
 
 // region:       -- Private Types, Functions
 
-fn hash_for_scheme(scheme_name: &str, to_hash: &ContentToHash) -> Result<String> {
+fn hash_for_scheme(scheme_name: &str, to_hash: ContentToHash) -> Result<String> {
     // -- Get the scheme
     // NOTE: Box<dyn Scheme> will deref into a Scheme Trait Object,
     // so we'll have Scheme Trait functions.
     // NOTE: We wrap the scheme::Error inside the pwd::Error::Scheme(scheme::Error)
     // with the help of derive_more #[from], which allows us to convert from the
     // scheme::Error (that'd we get from scheme::get_scheme()) to pwd::Error easily.
-    let scheme = get_scheme(scheme_name)?;
-
-    let pwd_hashed = scheme.hash(to_hash)?;
+    let pwd_hashed = get_scheme(scheme_name)?.hash(&to_hash)?;
 
     Ok(format!("#{scheme_name}#{pwd_hashed}"))
 }
 
-fn validate_for_scheme(scheme_name: &str, to_hash: &ContentToHash, pwd_ref: &str) -> Result<()> {
-    get_scheme(scheme_name)?.validate(to_hash, pwd_ref)?;
+fn validate_for_scheme(scheme_name: &str, to_hash: ContentToHash, pwd_ref: String) -> Result<()> {
+    get_scheme(scheme_name)?.validate(&to_hash, &pwd_ref)?;
 
     Ok(())
 }
@@ -126,8 +156,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_multi_scheme_ok() -> Result<()> {
+    #[tokio::test]
+    async fn test_multi_scheme_ok() -> Result<()> {
         // -- Setup & Fixtures
         // Q: Where does this string come from?
         let fx_salt = Uuid::parse_str("f05e8961-d6ad-4086-9e78-a6de065e5453")?;
@@ -141,9 +171,11 @@ mod tests {
         // ONLY our pwd/mod.rs has access to hash_for_scheme(), but since this local
         // 'tests' module is a child of our pwd module, children can see what parents
         // have (i.e., the private function hash_for_scheme()), so it's accessible here.
-        let pwd_hashed = hash_for_scheme("01", &fx_to_hash)?;
+        // NOTE: U: We enabled Clone for tests only via #[cfg_attr(test, Clone)] for
+        // our ContentToHash struct.
+        let pwd_hashed = hash_for_scheme("01", fx_to_hash.clone())?;
         // println!("->> pwd_hashed: {pwd_hashed}");
-        let pwd_validate = validate_pwd(&fx_to_hash, &pwd_hashed)?;
+        let pwd_validate = validate_pwd(fx_to_hash.clone(), pwd_hashed).await?;
         // println!("->>   validate: {pwd_validate:?}");
 
         // -- Check

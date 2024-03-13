@@ -4,7 +4,7 @@ Following the progression here [ref](https://github.com/rust10x/rust-web-app?tab
 
 [x] Update to Axum 0.7
 [x] Work through E02 with Sea-Query + SQLX + ModQL
-[] Update to multi-crate workspace
+[x] Update to multi-crate workspace
 
 ## LOG
 

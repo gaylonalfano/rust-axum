@@ -3,6 +3,7 @@
 mod error;
 mod params;
 mod task_rpc;
+mod token_rpc;
 
 pub use self::error::{Error, Result};
 
@@ -11,6 +12,7 @@ use lib_core::model::ModelManager;
 use serde::Deserialize;
 use serde_json::{from_value, to_value, Value};
 use task_rpc::{create_task, delete_task, list_tasks, update_task};
+use token_rpc::{create_token, delete_token, list_tokens, update_token};
 
 // endregion:    -- Modules
 

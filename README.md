@@ -2,6 +2,10 @@
 
 Following the progression here [ref](https://github.com/rust10x/rust-web-app?tab=readme-ov-file#rust10x-web-app-youtube-videos)
 
+[x] Add token DB table
+[] Add seed_tokens() helper in \_dev_utils
+[] Add token_rpc.rs
+[] Add TokenBmc `lib-core/src/model/token.rs` tests
 [x] Update to Axum 0.7
 [x] Work through E02 with Sea-Query + SQLX + ModQL
 [x] Update to multi-crate workspace

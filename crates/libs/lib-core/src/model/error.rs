@@ -53,6 +53,9 @@ pub enum Error {
     // for our RequestLogLine
     #[from]
     ModqlIntoSeaQuery(#[serde_as(as = "DisplayFromStr")] modql::filter::IntoSeaError),
+    // NOTE: U: Want to seed dev db with some tokens
+    #[from]
+    SimpleFs(#[serde_as(as = "DisplayFromStr")] simple_fs::Error),
 }
 
 // // region: -- Froms

@@ -56,6 +56,9 @@ pub enum Error {
     // NOTE: U: Want to seed dev db with some tokens
     #[from]
     SimpleFs(#[serde_as(as = "DisplayFromStr")] simple_fs::Error),
+    // NOTE: U: Adding seed_tokens() helper need to convert from serde_json::Error ->> model::Error
+    #[from]
+    SerdeJson(#[serde_as(as = "DisplayFromStr")] serde_json::Error),
 }
 
 // // region: -- Froms

@@ -66,6 +66,7 @@ cargo watch -qcx "test model::task::tests -- --nocapture"
 
 # Specific test with filter
 cargo watch -qcx "test model::task::tests::test_create_ok"
+cargo watch -qcx "test test_list_by_filter_ok"
 
 # Quick specific test while developing
 cargo watch -qcx "test -q -p lib-auth test_multi_scheme -- --nocapture"

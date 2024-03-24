@@ -8,6 +8,7 @@ use crate::{ctx::Ctx, model::ModelManager};
 use modql::field::Fields;
 use modql::filter::{FilterNodes, ListOptions, OpValsBool, OpValsInt64, OpValsString};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DefaultOnNull};
 use sqlx::FromRow;
 
 // region: -- Token Types
@@ -33,13 +34,72 @@ use sqlx::FromRow;
 //   "lastTradeUnixTime": 1710395665
 // }
 
+#[derive(Debug, Deserialize)]
+pub struct BirdeyeRootResponse {
+    // #[serde(flatten)]
+    pub success: bool,
+    // -- 'data' as HashMap<String, Value>
+    // pub data: HashMap<String, Value>, // Ignore other props
+    // NOTE: !! WITH #[serde(flatten)], data: HashMap<String, Value> returns:
+    // ("success", Bool(true))
+    // ("data", Object {"tokens": Array [Object {"address": String("So1111111111....)
+
+    // NOTE: !! WITHOUT #[serde(flatten)], data: HashMap<String, Value> returns:
+    // ("tokens", Array [Object {"address": String("So111111111111....)
+    // ("updateUnixTime", Number(1710403689))
+    // ("updateTime", String("2024-03-14T08:08:09"))
+    // ("total", Number(200347))
+
+    // -- 'data' as custom BirdeyeDataResponse
+    pub data: BirdeyeDataResponse,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BirdeyeDataResponse {
+    pub update_unix_time: i64,
+    pub update_time: String,
+    // #[serde(flatten)]
+    // pub timestamp: TimeStamp,
+    pub tokens: Vec<BirdeyeTokenResponse>,
+    pub total: i64,
+}
+
+// Q: Do I need a perfect matching struct to use serde_json::from_str()
+// to convert to a Rust object? In _dev_utils/mod.rs I want to seed_tokens() from JSON file.
+// REF: https://stackoverflow.com/questions/48595735/invalid-type-map-expected-a-sequence-when-deserializing-a-nested-json-struct
+// U: Adding 'serde_with' crate to access useful helpers (serde_as(as = "DefaultOnNull"))
+// NOTE: BirdeyeTokenResponse doesn't have update_unix_time & update_time fields, but I want
+// to store that inside the TokenForCreate struct, so I'm splitting into two structs, even
+// though they share a lot of common fields.
+/// Sent back from Birdeye API response
+#[serde_as]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BirdeyeTokenResponse {
+    pub address: String,
+    pub decimals: i64,
+    pub liquidity: f64,
+    #[serde(rename = "logoURI")]
+    pub logo_uri: String,
+    pub mc: f64,
+    pub symbol: String,
+    #[serde_as(deserialize_as = "DefaultOnNull")]
+    #[serde(rename = "v24hChangePercent")]
+    pub v24h_change_percent: Option<f64>,
+    #[serde(rename = "v24hUSD")]
+    pub v24h_usd: f64,
+    pub name: String,
+    pub last_trade_unix_time: i64,
+}
+
 /// Sent back from model layer
 #[derive(Debug, Clone, Fields, FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Token {
     pub id: i64,
     pub update_unix_time: i64,
-    pub update_human_time: String,
+    pub update_time: String,
     pub address: String,
     pub decimals: i64,
     pub liquidity: f64,
@@ -61,12 +121,14 @@ pub struct Token {
 // our update() test, we can use ..Default::default()
 // U: Adding serde rename_all="camelCase" so I can read
 // in TOKEN_LIST.json and convert to TokenForCreate object types.
+// U: BirdeyeTokenResponse doesn't have update_unix_time & update_time,
+// but the BirdeyeDataResponse does. I need to add those for TokenForCreate.
 #[derive(Fields, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenForCreate {
     // Don't want users via API to change the 'id' prop
     pub update_unix_time: i64,
-    pub update_human_time: String,
+    pub update_time: String,
     pub address: String,
     pub decimals: i64,
     pub liquidity: f64,
@@ -85,8 +147,8 @@ pub struct TokenForCreate {
 /// Sent to model layer to update data structure
 #[derive(Fields, Default, Deserialize)]
 pub struct TokenForUpdate {
-    pub update_unix_time: i64,
-    pub update_human_time: String,
+    pub update_unix_time: Option<i64>,
+    pub update_time: Option<String>,
     pub liquidity: Option<f64>,
     pub mc: Option<f64>,
     pub v24h_change_percent: Option<f64>,
@@ -104,10 +166,12 @@ pub struct TokenFilter {
     // with other props below with a line between.
     id: Option<OpValsInt64>,
 
+    symbol: Option<OpValsString>,
     address: Option<OpValsString>,
     v24h_change_percent: Option<OpValsInt64>,
     v24h_usd: Option<OpValsInt64>,
 }
+
 // endregion: -- Token Types
 
 // region: -- TokenBmc
@@ -235,7 +299,7 @@ mod tests {
         // :%s/fx_[^ ]* ---- highlights the var names but don't know how to then yank...
         // U: :let @a='' to empty register first, THEN: :%s/regex/\=setreg('A', submatch(0))/n
         let fx_update_unix_time = 1692203008;
-        let fx_update_human_time = "2023-08-16T16:23:28";
+        let fx_update_time = "2023-08-16T16:23:28";
         let fx_address = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
         let fx_decimals = 6;
         let fx_liquidity = 287392581.54247737;
@@ -254,7 +318,7 @@ mod tests {
         // Q: What's the difference between a Fixture and a Value?
         let token_c = TokenForCreate {
             update_unix_time: fx_update_unix_time,
-            update_human_time: fx_update_human_time.to_string(),
+            update_time: fx_update_time.to_string(),
             address: fx_address.to_string(),
             decimals: fx_decimals,
             liquidity: fx_liquidity,
@@ -326,193 +390,174 @@ mod tests {
         Ok(())
     }
 
-    // // TODO:Finish after I figure out _dev_utils::seed_tokens()
-    // #[serial]
-    // #[tokio::test]
-    // async fn test_list_all_ok() -> Result<()> {
-    //     // -- Setup & Fixtures
-    //     let mm = _dev_utils::init_test().await;
-    //     let ctx = Ctx::root_ctx();
-    //     let fx_titles = &["test_list_all_ok-task 01", "test_list_all_ok-task 02"];
-    //     _dev_utils::seed_tasks(&ctx, &mm, fx_titles).await?;
-    //     // Q: Do I simply call test_create_ok() to get a quick db seed?
-    //     // let fx_update_unix_time = 1692203008;
-    //     // let fx_update_human_time = "2023-08-16T16:23:28";
-    //     // let fx_address = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-    //     // let fx_decimals = 6;
-    //     // let fx_symbol = "USDC";
-    //     // let fx_name = "USD Coin";
-    //     // let fx_mc = 5034893047.819173;
-    //     // let fx_v24h_change_percent = 32.10423521982971;
-    //     // let fx_v24h_usd = 30582475.965653457;
-    //     // let token_c = TokenForCreate {
-    //     //     update_unix_time: fx_update_unix_time,
-    //     //     update_human_time: fx_update_human_time.to_string(),
-    //     //     address: fx_address.to_string(),
-    //     //     decimals: fx_decimals,
-    //     //     symbol: fx_symbol.to_string(),
-    //     //     name: fx_name.to_string(),
-    //     //     mc: fx_mc,
-    //     //     v24h_change_percent: fx_v24h_change_percent,
-    //     //     v24h_usd: fx_v24h_usd,
-    //     // };
-    //     // let id = TokenBmc::create(&ctx, &mm, token_c).await?;
-    //
-    //     // -- Check
-    //     // let (title,): (String,) = sqlx::query_as("SELECT title FROM task WHERE id = $1")
-    //     //     .bind(id)
-    //     //     .fetch_one(mm.db())
-    //     //     .await?;
-    //     // println!("->> {title}");
-    //     // assert_eq!(title, fx_title);
-    //     let token = TokenBmc::get(&ctx, &mm, id).await?;
-    //     assert_eq!(token.name, fx_name);
-    //
-    //     // -- Exec
-    //     let tasks = TokenBmc::list(&ctx, &mm, None, None).await?;
-    //
-    //     // -- Check
-    //     // NOTE: To ensure we're checking against the correct tasks,
-    //     // we're going to make sure the task titles match
-    //     let tasks: Vec<Task> = tasks
-    //         .into_iter()
-    //         .filter(|t| t.title.starts_with("test_list_all_ok-task"))
-    //         .collect();
-    //     assert_eq!(tasks.len(), 2, "Number of seeded tasks");
-    //
-    //     // -- Clean
-    //     for task in tasks.iter() {
-    //         TaskBmc::delete(&ctx, &mm, task.id).await?;
-    //     }
-    //
-    //     Ok(())
-    // }
-    //
-    // #[serial]
-    // #[tokio::test]
-    // async fn test_list_by_filter_ok() -> Result<()> {
-    //     // -- Setup & Fixtures
-    //     let mm = _dev_utils::init_test().await;
-    //     let ctx = Ctx::root_ctx();
-    //     let fx_titles = &[
-    //         "test_list_by_filter_ok-task 01.a",
-    //         "test_list_by_filter_ok-task 01.b",
-    //         "test_list_by_filter_ok-task 02.a",
-    //         "test_list_by_filter_ok-task 02.b",
-    //         "test_list_by_filter_ok-task 03",
-    //     ];
-    //     _dev_utils::seed_tasks(&ctx, &mm, fx_titles).await?;
-    //
-    //     // -- Exec
-    //     // NOTE: Lots of Modql filter operations
-    //     // REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=1975
-    //     let filters: Vec<TaskFilter> = serde_json::from_value(json!([
-    //         {
-    //             // "title": "test_list_by_filter_ok-task 01.a"
-    //             "title": {
-    //                 "$endsWith": ".a",
-    //                 // "$contains": "01",
-    //                 "$containsAny": ["01", "02"],
-    //             }
-    //         },
-    //         {
-    //         "title": {"$contains": "03"}
-    //         }
-    //     ]))?;
-    //     let list_options: ListOptions = serde_json::from_value(json!({
-    //         // "limit": 1,
-    //         "order_bys": "!id",
-    //     }))?;
-    //
-    //     let tasks = TaskBmc::list(&ctx, &mm, Some(filters), Some(list_options)).await?;
-    //
-    //     // -- Check
-    //     // NOTE: TIP! When first writing tests, we can remove the check
-    //     // and just use a simple debug print. Later add check.
-    //     // NOTE: To ensure we're checking against the correct tasks,
-    //     // we're going to make sure the task titles match
-    //     assert_eq!(tasks.len(), 3);
-    //     assert!(tasks[0].title.ends_with("03"));
-    //     assert!(tasks[1].title.ends_with("02.a"));
-    //     assert!(tasks[2].title.ends_with("01.a"));
-    //
-    //     // -- Clean
-    //     let tasks = TaskBmc::list(
-    //         &ctx,
-    //         &mm,
-    //         Some(serde_json::from_value(json!([{
-    //             "title": {"$startsWith": "test_list_by_filter_ok"}
-    //         }]))?),
-    //         None,
-    //     )
-    //     .await?;
-    //     assert_eq!(tasks.len(), 5);
-    //
-    //     for task in tasks.iter() {
-    //         TaskBmc::delete(&ctx, &mm, task.id).await?;
-    //     }
-    //
-    //     Ok(())
-    // }
-    //
-    // #[serial]
-    // #[tokio::test]
-    // async fn test_update_ok() -> Result<()> {
-    //     // -- Setup & Fixtures
-    //     let mm = _dev_utils::init_test().await;
-    //     let ctx = Ctx::root_ctx();
-    //     let fx_title = "test_update_ok - task 01";
-    //     let fx_title_new = "test_update_ok - task 01 - new";
-    //     let fx_task = _dev_utils::seed_tasks(&ctx, &mm, &[fx_title])
-    //         .await?
-    //         .remove(0);
-    //
-    //     // -- Exec
-    //     TaskBmc::update(
-    //         &ctx,
-    //         &mm,
-    //         fx_task.id,
-    //         TaskForUpdate {
-    //             title: Some(fx_title_new.to_string()),
-    //             // U: Added 'Default' trait to TaskForUpdate, so 'done: bool'
-    //             ..Default::default()
-    //         },
-    //     )
-    //     .await?;
-    //
-    //     // -- Check
-    //     let task = TaskBmc::get(&ctx, &mm, fx_task.id).await?;
-    //     assert_eq!(task.title, fx_title_new);
-    //
-    //     // -- Clean
-    //     TaskBmc::delete(&ctx, &mm, task.id).await?;
-    //
-    //     Ok(())
-    // }
-    //
-    // #[serial]
-    // #[tokio::test]
-    // async fn test_delete_err_not_found() -> Result<()> {
-    //     // -- Setup & Fixtures
-    //     let mm = _dev_utils::init_test().await;
-    //     let ctx = Ctx::root_ctx();
-    //     let fx_id = 100;
-    //
-    //     // -- Exec
-    //     let res = TaskBmc::delete(&ctx, &mm, fx_id).await;
-    //
-    //     assert!(
-    //         matches!(
-    //             res,
-    //             Err(crate::model::Error::EntityNotFound {
-    //                 entity: "task",
-    //                 id: 100
-    //             })
-    //         ),
-    //         "EntityNotFound not matching"
-    //     );
-    //
-    //     Ok(())
-    // }
+    #[serial]
+    #[tokio::test]
+    async fn test_list_all_ok() -> Result<()> {
+        // -- Setup & Fixtures
+        let mm = _dev_utils::init_test().await;
+        let ctx = Ctx::root_ctx();
+        _dev_utils::seed_tokens(&ctx, &mm).await?;
+
+        // -- Exec
+        let tokens = TokenBmc::list(&ctx, &mm, None, None).await?;
+
+        // -- Check
+        // TODO: Need a better check eventually
+        println!("test_list_all_ok token.len(): {}", tokens.len());
+        // assert!(!tokens.is_empty());
+        // assert_eq!(
+        //     tokens.is_empty(),
+        //     false,
+        //     "Tokens vector should not be empty"
+        // );
+
+        // assert_eq!(tokens.is_empty()len(), 2, "Number of seeded tasks");
+
+        // -- Clean
+        for token in tokens.iter() {
+            println!("token: {:?}", token);
+            TokenBmc::delete(&ctx, &mm, token.id).await?;
+        }
+
+        Ok(())
+    }
+
+    #[serial]
+    #[tokio::test]
+    async fn test_list_by_filter_ok() -> Result<()> {
+        // -- Setup & Fixtures
+        let mm = _dev_utils::init_test().await;
+        let ctx = Ctx::root_ctx();
+        _dev_utils::seed_tokens(&ctx, &mm).await?;
+        let fx_symbols = &["Bonk", "SOL", "USDC"];
+
+        // -- Exec
+        // NOTE: Lots of Modql filter operations
+        // REF: https://youtu.be/-dMH9UiwKqg?list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q&t=1975
+        let list_filters: Vec<TokenFilter> = serde_json::from_value(json!([
+            {
+                // "title": "test_list_by_filter_ok-task 01.a"
+                // "title": {
+                //     "$endsWith": ".a",
+                //     // "$contains": "01",
+                //     "$containsAny": ["01", "02"],
+                // }
+                "symbol": {
+                    "$in": ["Bonk", "SOL", "USDC"]
+                }
+            },
+            {
+            "symbol": {"$startsWith": "$W"}
+            }
+        ]))?;
+        let list_options: ListOptions = serde_json::from_value(json!({
+            // "limit": 1,
+            "order_bys": "!id",
+        }))?;
+
+        let tokens = TokenBmc::list(&ctx, &mm, Some(list_filters), Some(list_options)).await?;
+
+        // -- Check
+        // NOTE: TIP! When first writing tests, we can remove the check
+        // and just use a simple debug print. Later add check.
+        println!("->> {tokens:#?}");
+        assert_eq!(tokens.len(), 5);
+        // assert!(tasks[0].title.ends_with("03"));
+        // assert!(tasks[1].title.ends_with("02.a"));
+        // assert!(tasks[2].title.ends_with("01.a"));
+
+        // -- Clean
+        // let tasks = TaskBmc::list(
+        //     &ctx,
+        //     &mm,
+        //     Some(serde_json::from_value(json!([{
+        //         "title": {"$startsWith": "test_list_by_filter_ok"}
+        //     }]))?),
+        //     None,
+        // )
+        // .await?;
+        // assert_eq!(tasks.len(), 5);
+        //
+        for token in tokens.iter() {
+            TokenBmc::delete(&ctx, &mm, token.id).await?;
+        }
+
+        Ok(())
+    }
+
+    #[serial]
+    #[tokio::test]
+    async fn test_update_ok() -> Result<()> {
+        // -- Setup & Fixtures
+        let mm = _dev_utils::init_test().await;
+        let ctx = Ctx::root_ctx();
+        let fx_token = _dev_utils::seed_tokens(&ctx, &mm).await?.remove(0);
+        let fx_timestamp = "1524820690".parse::<i64>().unwrap();
+
+        // -- Exec
+        TokenBmc::update(
+            &ctx,
+            &mm,
+            fx_token.id,
+            TokenForUpdate {
+                last_trade_unix_time: Some(fx_timestamp),
+                // U: Added 'Default' trait to TokenForUpdate
+                ..Default::default()
+            },
+        )
+        .await?;
+
+        // -- Check
+        let token = TokenBmc::get(&ctx, &mm, fx_token.id).await?;
+        // println!("->> {token:#?}");
+        // ->> Token {
+        //     id: 1000,
+        //     update_unix_time: 1710403689,
+        //     update_time: "2024-03-14T08:08:09",
+        //     address: "So11111111111111111111111111111111111111112",
+        //     decimals: 9,
+        //     liquidity: 602431219.2591399,
+        //     logo_uri: "https://img.fotofolio.xyz/?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsolana-labs%2Ftoken-list%2Fmain%2Fasse
+        // ts%2Fmainnet%2FSo11111111111111111111111111111111111111112%2Flogo.png",
+        //     symbol: "SOL",
+        //     name: "Wrapped SOL",
+        //     mc: 94913737255.9515,
+        //     v24h_change_percent: -4.348290826563488,
+        //     v24h_usd: 2074635322.106826,
+        //     last_trade_unix_time: 1524820690,
+        // }
+
+        assert_eq!(token.last_trade_unix_time, fx_timestamp);
+
+        // -- Clean
+        TokenBmc::delete(&ctx, &mm, token.id).await?;
+
+        Ok(())
+    }
+
+    #[serial]
+    #[tokio::test]
+    async fn test_delete_err_not_found() -> Result<()> {
+        // -- Setup & Fixtures
+        let mm = _dev_utils::init_test().await;
+        let ctx = Ctx::root_ctx();
+        let fx_id = 100;
+
+        // -- Exec
+        let res = TokenBmc::delete(&ctx, &mm, fx_id).await;
+
+        assert!(
+            matches!(
+                res,
+                Err(crate::model::Error::EntityNotFound {
+                    entity: "token",
+                    id: 100
+                })
+            ),
+            "EntityNotFound not matching"
+        );
+
+        Ok(())
+    }
 }
 // endregion: -- Tests

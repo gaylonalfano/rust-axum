@@ -4,11 +4,9 @@ Following the progression here [ref](https://github.com/rust10x/rust-web-app?tab
 
 [x] Update to Axum 0.7
 [x] Work through E02 with Sea-Query + SQLX + ModQL
-[] Update to multi-crate workspace
+[x] Update to multi-crate workspace
 
 ## LOG
-
-I have slightly modified my project structure compared to the repo. I've split the root folder into having both a frontend/ and backend/ dirs.
 
 2/6: Adding Sea Query + ModQL. [Quick summary of changes.](https://www.youtube.com/watch?v=-dMH9UiwKqg&list=PL7r-PXl6ZPcCIOFaL7nVHXZvBmHNhrh_Q)
 

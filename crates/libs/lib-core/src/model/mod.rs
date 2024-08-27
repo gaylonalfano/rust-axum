@@ -36,6 +36,7 @@ mod base;
 mod error;
 mod store;
 pub mod task;
+pub mod token;
 pub mod user;
 
 // Re-export our model module Error and Result aliases

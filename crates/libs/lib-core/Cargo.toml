@@ -39,6 +39,7 @@ tracing = "0.1"
 uuid = { version = "1", features = ["v4", "fast-rng"] }
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
 derive_more = { workspace = true }
+simple-fs = { version = "0.1", features = ["full"] }
 
 [dev-dependencies]
 serial_test = "3"
